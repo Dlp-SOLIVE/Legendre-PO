@@ -20,6 +20,7 @@ import {
   Settings,
   Shield,
   Trash2,
+  UserPlus,
   Users,
   X,
 } from "lucide-react";
@@ -39,6 +40,7 @@ import {
   type PurchaseOrderDraft,
 } from "./lib/data";
 import { downloadCsv } from "./lib/csv";
+import { inviteUser } from "./lib/invite";
 import { hasSupabaseConfig, supabase } from "./lib/supabase";
 import { isoToday, money, shortDate } from "./lib/format";
 import type {
@@ -282,30 +284,7 @@ function ProcurementShell({ session }: { session: Session }) {
               />
             )}
             {view === "staff" && (
-              <AdminPanel
-                title="Staff / Users"
-                rows={references.staff}
-                identity="full_name"
-                fields={[
-                  { name: "full_name", label: "Full name", required: true },
-                  { name: "initials", label: "Initials / code" },
-                  { name: "email", label: "Email", type: "email", required: true },
-                  {
-                    name: "role",
-                    label: "Role",
-                    type: "select",
-                    options: [
-                      { value: "admin", label: "Admin" },
-                      { value: "standard", label: "Standard user" },
-                      { value: "viewer", label: "Viewer" },
-                    ],
-                  },
-                  { name: "is_active", label: "Active", type: "checkbox" },
-                ]}
-                onSave={upsertStaff}
-                onDelete={(id) => deleteRow("staff_members", id)}
-                onRefresh={refresh}
-              />
+              <StaffAdminView staff={references.staff} onRefresh={refresh} />
             )}
             {view === "categories" && (
               <AdminPanel
@@ -607,6 +586,112 @@ function SettingsPanel({
         onEdit={(row) => setEditing(row)}
         onDelete={undefined}
       />
+    </section>
+  );
+}
+
+function StaffAdminView({ staff, onRefresh }: { staff: StaffMember[]; onRefresh: () => Promise<void> }) {
+  return (
+    <div className="stacked-sections">
+      <InviteUserPanel onInvited={onRefresh} />
+      <AdminPanel
+        title="Staff / Users"
+        rows={staff}
+        identity="full_name"
+        fields={[
+          { name: "full_name", label: "Full name", required: true },
+          { name: "initials", label: "Initials / code" },
+          { name: "email", label: "Email", type: "email", required: true },
+          {
+            name: "role",
+            label: "Role",
+            type: "select",
+            options: [
+              { value: "admin", label: "Admin" },
+              { value: "standard", label: "Standard user" },
+              { value: "viewer", label: "Viewer" },
+            ],
+          },
+          { name: "is_active", label: "Active", type: "checkbox" },
+        ]}
+        onSave={upsertStaff}
+        onDelete={(id) => deleteRow("staff_members", id)}
+        onRefresh={onRefresh}
+      />
+    </div>
+  );
+}
+
+function InviteUserPanel({ onInvited }: { onInvited: () => Promise<void> }) {
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    setBusy(true);
+    setMessage(null);
+    setError(null);
+
+    try {
+      const result = await inviteUser({
+        full_name: String(form.get("full_name") ?? "").trim(),
+        initials: String(form.get("initials") ?? "").trim(),
+        email: String(form.get("email") ?? "").trim(),
+        role: String(form.get("role") ?? "standard") as AppRole,
+      });
+      setMessage(result);
+      event.currentTarget.reset();
+      await onInvited();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to invite user.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="work-section">
+      <div className="section-heading">
+        <div>
+          <p className="eyebrow">Supabase Auth</p>
+          <h2>Invite User</h2>
+        </div>
+      </div>
+      {message && <div className="notice">{message}</div>}
+      {error && <div className="notice error">{error}</div>}
+      <form className="editor-grid" onSubmit={submit}>
+        <label>
+          Full name
+          <input name="full_name" required />
+        </label>
+        <label>
+          Initials / code
+          <input name="initials" />
+        </label>
+        <label>
+          Email
+          <input name="email" type="email" required />
+        </label>
+        <label>
+          Role
+          <select name="role" defaultValue="standard">
+            <option value="standard">Standard user</option>
+            <option value="viewer">Viewer</option>
+            <option value="admin">Admin</option>
+          </select>
+        </label>
+        <div className="button-row wide">
+          <button type="submit" disabled={busy}>
+            <UserPlus size={16} />
+            Send invite
+          </button>
+        </div>
+      </form>
+      <p className="helper-text">
+        The invite creates a Supabase Auth user and a matching staff record. The email address must match the user's login email.
+      </p>
     </section>
   );
 }

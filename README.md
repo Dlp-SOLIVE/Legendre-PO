@@ -46,9 +46,10 @@ Copy `.env.example` to `.env`:
 ```bash
 VITE_SUPABASE_URL=https://your-project-ref.supabase.co
 VITE_SUPABASE_ANON_KEY=your-publishable-or-anon-key
+SUPABASE_SERVICE_ROLE_KEY=server-side-service-role-key-for-invites
 ```
 
-Use the browser-safe Supabase publishable/anon key only. Never put a Supabase service role key in Netlify or Vite client variables.
+Use the browser-safe Supabase publishable/anon key for `VITE_SUPABASE_ANON_KEY`. The `SUPABASE_SERVICE_ROLE_KEY` is used only by the Netlify invite-user function. Never prefix the service role key with `VITE_`, and never use it in browser code.
 
 ## PO Numbering
 
@@ -80,9 +81,20 @@ The app will show a setup screen if the Supabase environment variables are missi
 4. Add the same environment variables in Netlify:
    - `VITE_SUPABASE_URL`
    - `VITE_SUPABASE_ANON_KEY`
+   - `SUPABASE_SERVICE_ROLE_KEY`
 5. Deploy.
 
 `netlify.toml` includes the Vite build settings and a single-page-app redirect.
+
+## Inviting Users
+
+Admins can invite users from **Staff → Invite User**. The invite flow:
+
+- Verifies the current signed-in user is an active `admin` in `staff_members`
+- Sends a Supabase Auth invite email
+- Creates or updates the matching staff record and role
+
+This requires `SUPABASE_SERVICE_ROLE_KEY` to be configured in Netlify environment variables. Find it in Supabase under **Project Settings → API**. It must stay server-side only.
 
 ## GitHub Repository
 

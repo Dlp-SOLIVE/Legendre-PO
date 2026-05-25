@@ -255,6 +255,11 @@ th {
   padding: 18px;
 }
 
+.stacked-sections {
+  display: grid;
+  gap: 18px;
+}
+
 .section-heading {
   justify-content: space-between;
   margin-bottom: 16px;
@@ -401,6 +406,13 @@ th {
 
 .muted {
   color: #69766f;
+}
+
+.helper-text {
+  color: #66756d;
+  font-size: 0.88rem;
+  line-height: 1.45;
+  margin: -4px 0 0;
 }
 
 .status-select {
