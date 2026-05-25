@@ -1130,11 +1130,27 @@ function POForm({ references, onCreated, onDone }: { references: ReferenceData; 
 
 function PreviewModal({ po, settings, onClose }: { po: PurchaseOrder; settings: AppSetting[]; onClose: () => void }) {
   const company = (settings.find((setting) => setting.setting_key === "company")?.setting_value ?? {}) as Record<string, string>;
+
+  function printPurchaseOrder() {
+    const previousTitle = document.title;
+    const cleanPoNumber = po.po_number.replace(/[\\/:*?"<>|]+/g, "-");
+    document.title = `${cleanPoNumber} - Legendre UK Purchase Order`;
+
+    const restoreTitle = () => {
+      document.title = previousTitle;
+      window.removeEventListener("afterprint", restoreTitle);
+    };
+
+    window.addEventListener("afterprint", restoreTitle, { once: true });
+    window.print();
+    window.setTimeout(restoreTitle, 1200);
+  }
+
   return (
     <div className="modal-backdrop">
       <div className="modal-shell">
         <div className="modal-actions">
-          <button onClick={() => window.print()}>
+          <button onClick={printPurchaseOrder}>
             <Printer size={16} />
             Print / Save PDF
           </button>
@@ -1153,7 +1169,7 @@ function PurchaseOrderPreview({ po, company }: { po: PurchaseOrder; company: Rec
   const invoiceEmail = company.accounts_email ?? "leguk.accounts@groupe-legendre.com";
   return (
     <div className="print-area">
-      <article className="po-page">
+      <article className="po-page po-order-page">
         <header className="po-header">
           <div className="po-logo">LEGENDRE</div>
           <div className="po-company">

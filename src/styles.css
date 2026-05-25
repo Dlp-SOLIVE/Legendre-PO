@@ -737,34 +737,178 @@ th {
     size: A4;
   }
 
+  html,
+  body,
+  #root {
+    background: #fff;
+    height: auto;
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 210mm;
+  }
+
+  body {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
   body * {
-    visibility: hidden;
+    visibility: hidden !important;
   }
 
   .print-area,
   .print-area * {
-    visibility: visible;
+    visibility: visible !important;
   }
 
   .modal-backdrop,
-  .modal-shell,
+  .modal-shell {
+    background: #fff !important;
+    display: block !important;
+    inset: auto !important;
+    margin: 0 !important;
+    overflow: visible !important;
+    padding: 0 !important;
+    position: static !important;
+  }
+
   .print-area {
-    background: #fff;
-    display: block;
-    inset: auto;
-    padding: 0;
-    position: static;
+    background: #fff !important;
+    display: block !important;
+    gap: 0 !important;
+    left: 0;
+    margin: 0 !important;
+    padding: 0 !important;
+    position: absolute;
+    top: 0;
+    width: 210mm;
   }
 
   .modal-actions {
-    display: none;
+    display: none !important;
   }
 
   .po-page {
     box-shadow: none;
     break-after: page;
-    margin: 0;
-    min-height: 297mm;
+    height: 297mm;
+    margin: 0 !important;
+    max-height: 297mm;
+    min-height: 0;
+    overflow: hidden;
+    padding: 9mm 10mm;
     page-break-after: always;
+    page-break-inside: avoid;
+    width: 210mm;
+  }
+
+  .po-page:last-child {
+    break-after: auto;
+    page-break-after: auto;
+  }
+
+  .po-order-page {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .po-header {
+    gap: 12px;
+  }
+
+  .po-logo {
+    font-size: 22px;
+  }
+
+  .po-company {
+    font-size: 9px;
+    gap: 2px;
+    max-width: 250px;
+  }
+
+  .po-title {
+    font-size: 18px;
+    margin: 12px 0 8px;
+    padding: 5px 0;
+  }
+
+  .po-meta-grid {
+    gap: 6px;
+  }
+
+  .po-meta-grid div,
+  .po-info-grid > div {
+    padding: 5px;
+  }
+
+  .po-meta-grid span {
+    font-size: 8px;
+  }
+
+  .po-meta-grid strong {
+    font-size: 10px;
+  }
+
+  .po-info-grid,
+  .po-bottom-grid {
+    gap: 7px;
+    margin-top: 8px;
+  }
+
+  .po-info-grid h3,
+  .po-bottom-grid h3 {
+    font-size: 9px;
+    margin: -5px -5px 5px;
+    padding: 4px 5px;
+  }
+
+  .po-info-grid dl {
+    font-size: 9px;
+    gap: 3px 6px;
+    grid-template-columns: 70px 1fr;
+  }
+
+  .po-lines {
+    font-size: 9px;
+    margin-top: 8px;
+  }
+
+  .po-lines th,
+  .po-lines td {
+    padding: 4px;
+  }
+
+  .po-bottom-grid p {
+    font-size: 9px;
+    line-height: 1.28;
+    margin: 0 0 5px;
+  }
+
+  .po-totals div {
+    font-size: 10px;
+    padding: 5px;
+  }
+
+  .po-footer {
+    font-size: 8px;
+    line-height: 1.3;
+    margin-top: auto;
+    padding-top: 5px;
+  }
+
+  .driver-page h2 {
+    font-size: 16px;
+    margin-bottom: 8px;
+    padding-bottom: 6px;
+  }
+
+  .driver-page ul {
+    font-size: 9.2px;
+    line-height: 1.24;
+    margin-top: 6px;
+  }
+
+  .driver-page li {
+    margin-bottom: 4px;
   }
 }
