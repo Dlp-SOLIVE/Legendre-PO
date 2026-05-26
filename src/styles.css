@@ -268,6 +268,13 @@ th {
   overflow-x: auto;
 }
 
+.po-list-toolbar {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: minmax(220px, 340px);
+  margin-bottom: 16px;
+}
+
 .actions-cell {
   text-align: right;
   white-space: nowrap;
@@ -683,6 +690,7 @@ th {
 
   .editor-grid,
   .form-grid,
+  .po-list-toolbar,
   .filters,
   .kpi-grid,
   .dashboard-grid,
@@ -710,6 +718,7 @@ th {
   .sidebar nav,
   .editor-grid,
   .form-grid,
+  .po-list-toolbar,
   .filters,
   .kpi-grid,
   .dashboard-grid,

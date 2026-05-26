@@ -835,9 +835,27 @@ function PurchaseOrders({
   onEdit: (po: PurchaseOrder) => void;
 }) {
   const [preview, setPreview] = useState<PurchaseOrder | null>(null);
+  const [projectFilter, setProjectFilter] = useState("");
+  const filteredPurchaseOrders = useMemo(
+    () => purchaseOrders.filter((po) => !projectFilter || po.project_id === projectFilter),
+    [projectFilter, purchaseOrders],
+  );
 
   return (
     <section className="work-section">
+      <div className="po-list-toolbar">
+        <label>
+          Project
+          <select value={projectFilter} onChange={(event) => setProjectFilter(event.target.value)}>
+            <option value="">All projects</option>
+            {references.projects.map((project) => (
+              <option value={project.id} key={project.id}>
+                {project.project_name}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
       <div className="table-wrap">
         <table>
           <thead>
@@ -851,7 +869,7 @@ function PurchaseOrders({
             </tr>
           </thead>
           <tbody>
-            {purchaseOrders.map((po) => (
+            {filteredPurchaseOrders.map((po) => (
               <tr key={po.id}>
                 <td>{po.po_number}</td>
                 <td>{shortDate(po.po_date)}</td>
@@ -868,9 +886,11 @@ function PurchaseOrders({
                 </td>
               </tr>
             ))}
-            {!purchaseOrders.length && (
+            {!filteredPurchaseOrders.length && (
               <tr>
-                <td colSpan={6}>No purchase orders yet.</td>
+                <td colSpan={6}>
+                  {purchaseOrders.length ? "No purchase orders match the selected project." : "No purchase orders yet."}
+                </td>
               </tr>
             )}
           </tbody>
