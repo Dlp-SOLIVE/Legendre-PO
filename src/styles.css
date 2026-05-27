@@ -110,19 +110,16 @@ th {
 }
 
 .brand-lockup {
-  align-items: center;
+  align-items: flex-start;
   display: flex;
-  gap: 12px;
+  flex-direction: column;
+  gap: 8px;
   margin-bottom: 28px;
 }
 
 .brand-lockup.large {
+  align-items: center;
   margin-bottom: 22px;
-}
-
-.brand-lockup strong,
-.brand-lockup span {
-  display: block;
 }
 
 .brand-lockup span {
@@ -130,16 +127,14 @@ th {
   font-size: 0.88rem;
 }
 
-.brand-mark {
-  align-items: center;
-  background: #cf2f28;
-  border-radius: 4px;
-  display: grid;
-  font-size: 1.3rem;
-  font-weight: 900;
-  height: 42px;
-  justify-items: center;
-  width: 42px;
+.brand-logo {
+  display: block;
+  height: auto;
+  max-width: min(100%, 210px);
+}
+
+.brand-lockup.large .brand-logo {
+  max-width: min(100%, 260px);
 }
 
 .sidebar nav {

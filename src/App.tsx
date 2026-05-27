@@ -41,6 +41,7 @@ import {
 import { downloadCsv } from "./lib/csv";
 import { hasSupabaseConfig, supabase } from "./lib/supabase";
 import { isoToday, money, shortDate } from "./lib/format";
+import legendreLogo from "./assets/legendre-logo.png";
 import type {
   AppRole,
   AppSetting,
@@ -161,11 +162,8 @@ function ProcurementShell({ session }: { session: Session }) {
     <div className="app-shell">
       <aside className="sidebar">
         <div className="brand-lockup">
-          <div className="brand-mark">L</div>
-          <div>
-            <strong>Legendre UK</strong>
-            <span>Procurement System</span>
-          </div>
+          <img className="brand-logo" src={legendreLogo} alt="Legendre" />
+          <span>Procurement System</span>
         </div>
         <nav>
           {navItems.map((item) => {
@@ -345,11 +343,8 @@ function LoginScreen() {
     <div className="login-screen">
       <section className="login-panel">
         <div className="brand-lockup large">
-          <div className="brand-mark">L</div>
-          <div>
-            <strong>Legendre UK</strong>
-            <span>Procurement System</span>
-          </div>
+          <img className="brand-logo" src={legendreLogo} alt="Legendre" />
+          <span>Procurement System</span>
         </div>
         <label>
           Email
