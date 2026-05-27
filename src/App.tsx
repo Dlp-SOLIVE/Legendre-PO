@@ -836,9 +836,15 @@ function PurchaseOrders({
 }) {
   const [preview, setPreview] = useState<PurchaseOrder | null>(null);
   const [projectFilter, setProjectFilter] = useState("");
+  const [requesterFilter, setRequesterFilter] = useState("");
   const filteredPurchaseOrders = useMemo(
-    () => purchaseOrders.filter((po) => !projectFilter || po.project_id === projectFilter),
-    [projectFilter, purchaseOrders],
+    () =>
+      purchaseOrders.filter((po) => {
+        if (projectFilter && po.project_id !== projectFilter) return false;
+        if (requesterFilter && po.requester_id !== requesterFilter) return false;
+        return true;
+      }),
+    [projectFilter, purchaseOrders, requesterFilter],
   );
 
   return (
@@ -855,6 +861,17 @@ function PurchaseOrders({
             ))}
           </select>
         </label>
+        <label>
+          Created by
+          <select value={requesterFilter} onChange={(event) => setRequesterFilter(event.target.value)}>
+            <option value="">All users</option>
+            {references.staff.map((member) => (
+              <option value={member.id} key={member.id}>
+                {member.initials ? `${member.initials} - ${member.full_name}` : member.full_name}
+              </option>
+            ))}
+          </select>
+        </label>
       </div>
       <div className="table-wrap">
         <table>
@@ -862,6 +879,7 @@ function PurchaseOrders({
             <tr>
               <th>PO number</th>
               <th>Date</th>
+              <th>Initials</th>
               <th>Project</th>
               <th>Supplier</th>
               <th>Total</th>
@@ -873,6 +891,7 @@ function PurchaseOrders({
               <tr key={po.id}>
                 <td>{po.po_number}</td>
                 <td>{shortDate(po.po_date)}</td>
+                <td>{po.requester?.initials || initialsFromName(po.requester?.full_name) || "-"}</td>
                 <td>{po.project?.project_name}</td>
                 <td>{po.supplier?.supplier_name}</td>
                 <td>{money(po.grand_total)}</td>
@@ -888,8 +907,8 @@ function PurchaseOrders({
             ))}
             {!filteredPurchaseOrders.length && (
               <tr>
-                <td colSpan={6}>
-                  {purchaseOrders.length ? "No purchase orders match the selected project." : "No purchase orders yet."}
+                <td colSpan={7}>
+                  {purchaseOrders.length ? "No purchase orders match the selected filters." : "No purchase orders yet."}
                 </td>
               </tr>
             )}
@@ -899,6 +918,17 @@ function PurchaseOrders({
       {preview && <PreviewModal po={preview} settings={references.settings} onClose={() => setPreview(null)} />}
     </section>
   );
+}
+
+function initialsFromName(name?: string | null) {
+  if (!name) return "";
+
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("");
 }
 
 function POForm({

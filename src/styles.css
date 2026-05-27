@@ -271,7 +271,7 @@ th {
 .po-list-toolbar {
   display: grid;
   gap: 14px;
-  grid-template-columns: minmax(220px, 340px);
+  grid-template-columns: repeat(2, minmax(220px, 340px));
   margin-bottom: 16px;
 }
 
