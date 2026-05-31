@@ -82,7 +82,13 @@ The app will show a setup screen if the Supabase environment variables are missi
    - `VITE_SUPABASE_ANON_KEY`
 5. Deploy.
 
-`netlify.toml` includes the Vite build settings and a single-page-app redirect.
+`netlify.toml` includes the Vite build settings, a single-page-app redirect, and a build ignore rule so Netlify only builds the `main` branch.
+
+## Development Workflow
+
+Use the `development` branch for work in progress. Netlify is configured to skip builds for branches other than `main`, so changes pushed to `development` will stay in GitHub until they are merged into `main`.
+
+When a change is ready to publish, merge `development` into `main` and push `main`. Netlify will then build and deploy the production site.
 
 ## User Access
 

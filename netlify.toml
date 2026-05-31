@@ -1,6 +1,7 @@
 [build]
 command = "npm run build"
 publish = "dist"
+ignore = "node -e \"process.exit(process.env.BRANCH === 'main' ? 1 : 0)\""
 
 [[redirects]]
 from = "/*"
