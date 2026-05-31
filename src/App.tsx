@@ -387,41 +387,49 @@ function LoginScreen() {
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
   const [initials, setInitials] = useState("");
+  const [registrationPassword, setRegistrationPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  async function signIn(mode: "password" | "magic") {
+  async function signIn() {
     if (!supabase) return;
     setBusy(true);
     setMessage(null);
-    const { error } =
-      mode === "password"
-        ? await supabase.auth.signInWithPassword({ email, password })
-        : await supabase.auth.signInWithOtp({ email });
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
     setBusy(false);
-    setMessage(error ? error.message : mode === "magic" ? "Magic link sent." : null);
+    setMessage(error ? error.message : null);
   }
 
   async function register(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!supabase) return;
+    if (registrationPassword.length < 6) {
+      setMessage("Password must be at least 6 characters.");
+      return;
+    }
+    if (registrationPassword !== confirmPassword) {
+      setMessage("Passwords do not match.");
+      return;
+    }
 
     setBusy(true);
     setMessage(null);
     try {
-      await requestStaffAccess({ email, fullName, initials });
-      const { error } = await supabase.auth.signInWithOtp({
+      const { error } = await supabase.auth.signUp({
         email,
+        password: registrationPassword,
         options: {
-          shouldCreateUser: true,
           data: {
             full_name: fullName,
             initials,
           },
         },
       });
+      if (error) throw error;
 
-      setMessage(error ? error.message : "Account request recorded. Check your email, then wait for an admin to grant access.");
+      await requestStaffAccess({ email, fullName, initials });
+      setMessage("Account request recorded. An admin must approve your access before you can sign in.");
     } catch (err) {
       setMessage(err instanceof Error ? err.message : "Unable to request access.");
     } finally {
@@ -447,13 +455,9 @@ function LoginScreen() {
               <input value={password} onChange={(event) => setPassword(event.target.value)} type="password" />
             </label>
             <div className="button-row">
-              <button disabled={busy || !email || !password} onClick={() => signIn("password")}>
+              <button disabled={busy || !email || !password} onClick={signIn}>
                 <Check size={16} />
                 Sign in
-              </button>
-              <button className="secondary" disabled={busy || !email} onClick={() => signIn("magic")}>
-                <FilePlus2 size={16} />
-                Magic link
               </button>
             </div>
             <button type="button" className="link-button" onClick={() => setMode("register")}>
@@ -474,8 +478,28 @@ function LoginScreen() {
               Initials
               <input required value={initials} onChange={(event) => setInitials(event.target.value.toUpperCase())} />
             </label>
+            <label>
+              Password
+              <input
+                required
+                minLength={6}
+                value={registrationPassword}
+                onChange={(event) => setRegistrationPassword(event.target.value)}
+                type="password"
+              />
+            </label>
+            <label>
+              Confirm password
+              <input
+                required
+                minLength={6}
+                value={confirmPassword}
+                onChange={(event) => setConfirmPassword(event.target.value)}
+                type="password"
+              />
+            </label>
             <div className="button-row">
-              <button disabled={busy || !email || !fullName || !initials} type="submit">
+              <button disabled={busy || !email || !fullName || !initials || !registrationPassword || !confirmPassword} type="submit">
                 <FilePlus2 size={16} />
                 Request access
               </button>

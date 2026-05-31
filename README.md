@@ -93,7 +93,7 @@ When a change is ready to publish, merge `development` into `main` and push `mai
 
 ## User Access
 
-Supabase Auth handles sign-in, and the Staff page controls application access. New account requests are inactive until an admin approves them, chooses `admin` or `user`, and assigns project access where required.
+Supabase Auth handles sign-in, and the Staff page controls application access. New users create an account with email, name, initials, and password. Their staff request is inactive until an admin approves them, chooses `admin` or `user`, and assigns project access where required.
 
 - Admins can approve staff, assign projects, manage projects/categories/settings, create suppliers, and create POs for any project.
 - Users can create suppliers and create POs only for projects assigned to them.
