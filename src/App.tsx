@@ -977,6 +977,7 @@ function StaffAdminView({ references, onRefresh }: { references: ReferenceData; 
       full_name: String(form.get("full_name") ?? "").trim(),
       initials: String(form.get("initials") ?? "").trim().toUpperCase() || null,
       email: String(form.get("email") ?? "").trim().toLowerCase(),
+      phone: String(form.get("phone") ?? "").trim() || null,
       role,
       is_active: form.get("is_active") === "on",
     };
@@ -1028,6 +1029,10 @@ function StaffAdminView({ references, onRefresh }: { references: ReferenceData; 
             <input name="email" required type="email" defaultValue={editing.email ?? ""} />
           </label>
           <label>
+            Phone number
+            <input name="phone" defaultValue={editing.phone ?? ""} />
+          </label>
+          <label>
             Role
             <select name="role" defaultValue={normalizeRole(editing.role)}>
               <option value="user">User</option>
@@ -1070,6 +1075,7 @@ function StaffAdminView({ references, onRefresh }: { references: ReferenceData; 
               <th>Full name</th>
               <th>Initials</th>
               <th>Email</th>
+              <th>Phone</th>
               <th>Role</th>
               <th>Status</th>
               <th>Projects</th>
@@ -1082,6 +1088,7 @@ function StaffAdminView({ references, onRefresh }: { references: ReferenceData; 
                 <td>{member.full_name}</td>
                 <td>{member.initials}</td>
                 <td>{member.email}</td>
+                <td>{member.phone}</td>
                 <td>{normalizeRole(member.role)}</td>
                 <td>{member.is_active ? "Active" : "Pending"}</td>
                 <td>{projectSummary(member)}</td>
@@ -1464,6 +1471,11 @@ function initialsFromName(name?: string | null) {
     .join("");
 }
 
+function formatStaffContact(staff?: StaffMember | null) {
+  if (!staff) return "";
+  return [staff.full_name, staff.phone].filter(Boolean).join(" - ");
+}
+
 function POForm({
   currentStaff,
   editingPurchaseOrder,
@@ -1506,6 +1518,7 @@ function POForm({
     editingPurchaseOrder?.requester?.initials ||
     currentStaff?.initials ||
     initialsFromName(editingPurchaseOrder?.requester?.full_name ?? currentStaff?.full_name);
+  const defaultSiteContact = formatStaffContact(editingPurchaseOrder?.requester ?? currentStaff);
   const [form, setForm] = useState({
     po_date: editingPurchaseOrder?.po_date ?? isoToday(),
     delivery_date: editingPurchaseOrder?.delivery_date ?? "",
@@ -1514,7 +1527,7 @@ function POForm({
       activeProjects[0]?.default_delivery_address ??
       activeProjects[0]?.site_address ??
       "",
-    site_contact: editingPurchaseOrder?.site_contact ?? "",
+    site_contact: editingPurchaseOrder?.site_contact ?? defaultSiteContact,
     vehicle_requirements: editingPurchaseOrder?.vehicle_requirements ?? "Vehicle to have accreditation FORS Silver as a minimum.",
     offloading_instructions: editingPurchaseOrder?.offloading_instructions ?? "By hand during site delivery hours.",
     delivery_instructions:
@@ -1997,8 +2010,8 @@ function Exports({ references, purchaseOrders }: { references: ReferenceData; pu
       action: () =>
         downloadCsv(
           "legendre-staff.csv",
-          ["Full name", "Initials", "Email", "Role", "Active"],
-          references.staff.map((row) => [row.full_name, row.initials, row.email, row.role, row.is_active]),
+          ["Full name", "Initials", "Email", "Phone", "Role", "Active"],
+          references.staff.map((row) => [row.full_name, row.initials, row.email, row.phone, row.role, row.is_active]),
         ),
     },
     {

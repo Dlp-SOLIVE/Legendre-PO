@@ -33,6 +33,7 @@ export type StaffMember = {
   full_name: string;
   initials: string | null;
   email: string;
+  phone: string | null;
   role: AppRole;
   is_active: boolean;
   created_at?: string;
