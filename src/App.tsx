@@ -1569,9 +1569,9 @@ function POForm({
           {lines.map((line, index) => (
             <div className="line-row" key={index}>
               <input placeholder="Description" value={line.description} onChange={(event) => updateLine(index, { description: event.target.value })} />
-              <input type="number" min="0.001" step="0.001" value={line.quantity} onChange={(event) => updateLine(index, { quantity: Number(event.target.value) })} />
+              <input type="number" min="0" step="1" value={line.quantity} onChange={(event) => updateLine(index, { quantity: Number(event.target.value) })} />
               <input value={line.unit} onChange={(event) => updateLine(index, { unit: event.target.value })} />
-              <input type="number" min="0" step="0.01" value={line.rate} onChange={(event) => updateLine(index, { rate: Number(event.target.value) })} />
+              <input type="number" min="0" step="1" value={line.rate} onChange={(event) => updateLine(index, { rate: Number(event.target.value) })} />
               <select value={line.vat_rate} onChange={(event) => updateLine(index, { vat_rate: Number(event.target.value) })}>
                 <option value={20}>VAT 20%</option>
                 <option value={5}>VAT 5%</option>
