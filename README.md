@@ -40,6 +40,8 @@ The staff email must match the Supabase Auth user email. Roles are:
 
 New users can request access from the sign-in screen. Their staff record is created as inactive until an admin opens the Staff page, activates the user, sets the role, and assigns one or more projects.
 
+Users who forget their password can use the `Forgot password?` link on the sign-in screen. Supabase sends a reset email back to the app, where the user can choose a new password before signing in again.
+
 ## Environment Variables
 
 Copy `.env.example` to `.env`:
@@ -94,6 +96,8 @@ When a change is ready to publish, merge `development` into `main` and push `mai
 ## User Access
 
 Supabase Auth handles sign-in, and the Staff page controls application access. New users create an account with email, name, initials, and password. Their staff request is inactive until an admin approves them, chooses `admin` or `user`, and assigns project access where required.
+
+Password reset is handled by Supabase Auth. The reset link must redirect back to an allowed app URL, such as `http://localhost:5173` for local testing and the Netlify site URL for deployed testing.
 
 - Admins can approve staff, assign projects, manage projects/categories/settings, create suppliers, and create POs for any project.
 - Users can create suppliers and create POs only for projects assigned to them.

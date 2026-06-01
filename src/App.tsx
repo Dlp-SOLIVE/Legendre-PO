@@ -90,6 +90,7 @@ const statuses: PurchaseOrderStatus[] = ["draft", "issued", "approved", "cancell
 export function App() {
   const [session, setSession] = useState<Session | null>(null);
   const [authReady, setAuthReady] = useState(false);
+  const [passwordRecovery, setPasswordRecovery] = useState(false);
 
   useEffect(() => {
     if (!supabase) return;
@@ -99,7 +100,12 @@ export function App() {
       setAuthReady(true);
     });
 
-    const { data } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+    if (window.location.hash.includes("type=recovery") || window.location.search.includes("type=recovery")) {
+      setPasswordRecovery(true);
+    }
+
+    const { data } = supabase.auth.onAuthStateChange((event, nextSession) => {
+      if (event === "PASSWORD_RECOVERY") setPasswordRecovery(true);
       setSession(nextSession);
       setAuthReady(true);
     });
@@ -109,6 +115,7 @@ export function App() {
 
   if (!hasSupabaseConfig) return <SetupScreen />;
   if (!authReady) return <FullScreenMessage title="Opening procurement system" />;
+  if (passwordRecovery && session) return <ResetPasswordScreen onDone={() => setPasswordRecovery(false)} />;
   if (!session) return <LoginScreen />;
 
   return <ProcurementShell session={session} />;
@@ -381,8 +388,92 @@ function PendingAccessScreen({
   );
 }
 
+function ResetPasswordScreen({ onDone }: { onDone: () => void }) {
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [message, setMessage] = useState<string | null>(null);
+  const [updated, setUpdated] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  async function updatePassword(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!supabase) return;
+    if (newPassword.length < 6) {
+      setMessage("Password must be at least 6 characters.");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setMessage("Passwords do not match.");
+      return;
+    }
+
+    setBusy(true);
+    setMessage(null);
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    setBusy(false);
+
+    if (error) {
+      setMessage(error.message);
+      return;
+    }
+
+    setMessage("Password updated. Please sign in with your new password.");
+    setUpdated(true);
+  }
+
+  async function returnToSignIn() {
+    await supabase?.auth.signOut();
+    onDone();
+  }
+
+  return (
+    <div className="login-screen">
+      <section className="login-panel">
+        <div className="brand-lockup large">
+          <img className="brand-logo" src={legendreLogo} alt="Legendre" />
+          <span>Procurement System</span>
+        </div>
+        {updated ? (
+          <button type="button" onClick={returnToSignIn}>
+            <Check size={16} />
+            Back to sign in
+          </button>
+        ) : (
+          <form className="login-form" onSubmit={updatePassword}>
+            <label>
+              New password
+              <input
+                required
+                minLength={6}
+                type="password"
+                value={newPassword}
+                onChange={(event) => setNewPassword(event.target.value)}
+              />
+            </label>
+            <label>
+              Confirm new password
+              <input
+                required
+                minLength={6}
+                type="password"
+                value={confirmPassword}
+                onChange={(event) => setConfirmPassword(event.target.value)}
+              />
+            </label>
+            <button disabled={busy || !newPassword || !confirmPassword} type="submit">
+              <Save size={16} />
+              Update password
+            </button>
+          </form>
+        )}
+        {message && <div className="notice">{message}</div>}
+      </section>
+    </div>
+  );
+}
+
 function LoginScreen() {
-  const [mode, setMode] = useState<"login" | "register">("login");
+  const [mode, setMode] = useState<"login" | "register" | "reset">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
@@ -429,12 +520,25 @@ function LoginScreen() {
       if (error) throw error;
 
       await requestStaffAccess({ email, fullName, initials });
-      setMessage("Account request recorded. An admin must approve your access before you can sign in.");
+      setMessage("Account request recorded. An admin must approve your access before you can sign in. If this email already existed, use Forgot password to choose a new password.");
     } catch (err) {
       setMessage(err instanceof Error ? err.message : "Unable to request access.");
     } finally {
       setBusy(false);
     }
+  }
+
+  async function requestPasswordReset(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!supabase) return;
+
+    setBusy(true);
+    setMessage(null);
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: window.location.origin,
+    });
+    setBusy(false);
+    setMessage(error ? error.message : "Password reset email sent. Open the link in that email to choose a new password.");
   }
 
   return (
@@ -463,8 +567,11 @@ function LoginScreen() {
             <button type="button" className="link-button" onClick={() => setMode("register")}>
               Create a new account
             </button>
+            <button type="button" className="link-button" onClick={() => setMode("reset")}>
+              Forgot password?
+            </button>
           </>
-        ) : (
+        ) : mode === "register" ? (
           <form className="login-form" onSubmit={register}>
             <label>
               Email
@@ -502,6 +609,23 @@ function LoginScreen() {
               <button disabled={busy || !email || !fullName || !initials || !registrationPassword || !confirmPassword} type="submit">
                 <FilePlus2 size={16} />
                 Request access
+              </button>
+              <button type="button" className="secondary" onClick={() => setMode("login")}>
+                <X size={16} />
+                Back
+              </button>
+            </div>
+          </form>
+        ) : (
+          <form className="login-form" onSubmit={requestPasswordReset}>
+            <label>
+              Email
+              <input required value={email} onChange={(event) => setEmail(event.target.value)} type="email" />
+            </label>
+            <div className="button-row">
+              <button disabled={busy || !email} type="submit">
+                <RefreshCw size={16} />
+                Send reset email
               </button>
               <button type="button" className="secondary" onClick={() => setMode("login")}>
                 <X size={16} />
