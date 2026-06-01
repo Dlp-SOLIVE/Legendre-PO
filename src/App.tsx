@@ -381,7 +381,6 @@ function ProcurementShell({ session }: { session: Session }) {
                   { name: "project_code", label: "Project code / initials", required: true },
                   { name: "site_address", label: "Site address", type: "textarea" },
                   { name: "cost_centre_code", label: "Cost centre code" },
-                  { name: "default_delivery_address", label: "Default delivery address", type: "textarea" },
                   { name: "site_contact_name", label: "Site contact name" },
                   { name: "site_contact_phone", label: "Site contact phone" },
                   { name: "is_active", label: "Active", type: "checkbox" },
