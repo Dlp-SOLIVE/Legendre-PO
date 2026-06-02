@@ -1917,7 +1917,6 @@ function PurchaseOrderPreview({ po, company }: { po: PurchaseOrder; company: Rec
         <table className="po-lines">
           <thead>
             <tr>
-              <th>Item code</th>
               <th>Item ref</th>
               <th>Description</th>
               <th>Category</th>
@@ -1931,7 +1930,6 @@ function PurchaseOrderPreview({ po, company }: { po: PurchaseOrder; company: Rec
           <tbody>
             {(po.line_items ?? []).map((line, index) => (
               <tr key={line.id ?? index}>
-                <td>{index + 1}</td>
                 <td>{line.item_ref ?? "-"}</td>
                 <td>{line.description}</td>
                 <td>{line.category?.category_name ?? "-"}</td>
