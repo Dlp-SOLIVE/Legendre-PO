@@ -1524,6 +1524,10 @@ function formatProjectSiteContact(project?: Project | null) {
   return [project.site_contact_name, project.site_contact_phone].filter(Boolean).join(" - ");
 }
 
+type PurchaseOrderLineDraft = PurchaseOrderLineItem & {
+  expense_type?: string;
+};
+
 function POForm({
   currentStaff,
   editingPurchaseOrder,
@@ -1557,6 +1561,11 @@ function POForm({
   const activeCategories = references.categories.filter(
     (category) => category.is_active || editingCategoryIds.has(category.id) || category.id === editingPurchaseOrder?.category_id,
   );
+  const categoryById = useMemo(() => new Map(activeCategories.map((category) => [category.id, category])), [activeCategories]);
+  const expenseTypes = useMemo(
+    () => [...new Set(activeCategories.map((category) => category.expense_type).filter(Boolean))].sort(),
+    [activeCategories],
+  );
 
   const [supplierId, setSupplierId] = useState(editingPurchaseOrder?.supplier_id ?? activeSuppliers[0]?.id ?? "");
   const [projectId, setProjectId] = useState(editingPurchaseOrder?.project_id ?? activeProjects[0]?.id ?? "");
@@ -1584,7 +1593,7 @@ function POForm({
       "Please call site contact 30 minutes prior to arrival. All drivers must be aware of the site and delivery rules as per the Driver's Leaflet.",
     notes: editingPurchaseOrder?.notes ?? "",
   });
-  const [lines, setLines] = useState<PurchaseOrderLineItem[]>([
+  const [lines, setLines] = useState<PurchaseOrderLineDraft[]>([
     ...(editingPurchaseOrder?.line_items?.length
       ? editingPurchaseOrder.line_items.map((line, index) => ({
           sort_order: index + 1,
@@ -1595,8 +1604,12 @@ function POForm({
           rate: Number(line.rate),
           vat_rate: Number(line.vat_rate),
           category_id: line.category_id ?? editingPurchaseOrder.category_id ?? "",
+          expense_type:
+            line.category?.expense_type ??
+            activeCategories.find((category) => category.id === (line.category_id ?? editingPurchaseOrder.category_id))?.expense_type ??
+            "",
         }))
-      : [{ sort_order: 1, item_ref: "", description: "", quantity: 1, unit: "each", rate: 0, vat_rate: 20, category_id: "" }]),
+      : [{ sort_order: 1, item_ref: "", description: "", quantity: 1, unit: "each", rate: 0, vat_rate: 20, category_id: "", expense_type: "" }]),
   ]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -1606,7 +1619,7 @@ function POForm({
   const subtotal = lines.reduce((sum, item) => sum + item.quantity * item.rate, 0);
   const vatTotal = lines.reduce((sum, item) => sum + item.quantity * item.rate * (item.vat_rate / 100), 0);
 
-  function updateLine(index: number, patch: Partial<PurchaseOrderLineItem>) {
+  function updateLine(index: number, patch: Partial<PurchaseOrderLineDraft>) {
     setLines((current) => current.map((line, lineIndex) => (lineIndex === index ? { ...line, ...patch } : line)));
   }
 
@@ -1746,7 +1759,7 @@ function POForm({
         <div className="line-editor">
           <div className="section-heading compact-heading">
             <h2>Line items</h2>
-            <button type="button" onClick={() => setLines([...lines, { sort_order: lines.length + 1, item_ref: "", description: "", quantity: 1, unit: "each", rate: 0, vat_rate: 20, category_id: "" }])}>
+            <button type="button" onClick={() => setLines([...lines, { sort_order: lines.length + 1, item_ref: "", description: "", quantity: 1, unit: "each", rate: 0, vat_rate: 20, category_id: "", expense_type: "" }])}>
               <Plus size={16} />
               Add line
             </button>
@@ -1755,6 +1768,7 @@ function POForm({
             <span>Item ref</span>
             <span>Description</span>
             <span>Category</span>
+            <span>Subcategory</span>
             <span>Unit numbers</span>
             <span>Unit</span>
             <span>Unit price</span>
@@ -1762,32 +1776,55 @@ function POForm({
             <span>Total</span>
             <span />
           </div>
-          {lines.map((line, index) => (
-            <div className="line-row" key={index}>
-              <input placeholder="Item ref" value={line.item_ref ?? ""} onChange={(event) => updateLine(index, { item_ref: event.target.value })} />
-              <input placeholder="Description" value={line.description} onChange={(event) => updateLine(index, { description: event.target.value })} />
-              <select value={line.category_id ?? ""} onChange={(event) => updateLine(index, { category_id: event.target.value })}>
-                <option value="">Category</option>
-                {activeCategories.map((category) => (
-                  <option value={category.id} key={category.id}>
-                    {formatCategoryLabel(category)}
-                  </option>
-                ))}
-              </select>
-              <input type="number" min="0" step="1" value={line.quantity} onChange={(event) => updateLine(index, { quantity: Number(event.target.value) })} />
-              <input value={line.unit} onChange={(event) => updateLine(index, { unit: event.target.value })} />
-              <input type="number" min="0" step="1" value={line.rate} onChange={(event) => updateLine(index, { rate: Number(event.target.value) })} />
-              <select value={line.vat_rate} onChange={(event) => updateLine(index, { vat_rate: Number(event.target.value) })}>
-                <option value={20}>VAT 20%</option>
-                <option value={5}>VAT 5%</option>
-                <option value={0}>No VAT</option>
-              </select>
-              <strong>{money(line.quantity * line.rate)}</strong>
-              <button type="button" className="icon-button danger" onClick={() => setLines(lines.filter((_, lineIndex) => lineIndex !== index))} title="Remove line">
-                <Trash2 size={16} />
-              </button>
-            </div>
-          ))}
+          {lines.map((line, index) => {
+            const selectedCategory = categoryById.get(line.category_id ?? "");
+            const selectedExpenseType = line.expense_type || selectedCategory?.expense_type || "";
+            const subcategories = selectedExpenseType
+              ? activeCategories.filter((category) => category.expense_type === selectedExpenseType)
+              : [];
+
+            return (
+              <div className="line-row" key={index}>
+                <input placeholder="Item ref" value={line.item_ref ?? ""} onChange={(event) => updateLine(index, { item_ref: event.target.value })} />
+                <input placeholder="Description" value={line.description} onChange={(event) => updateLine(index, { description: event.target.value })} />
+                <select value={selectedExpenseType} onChange={(event) => updateLine(index, { expense_type: event.target.value, category_id: "" })}>
+                  <option value="">Category</option>
+                  {expenseTypes.map((expenseType) => (
+                    <option value={expenseType} key={expenseType}>
+                      {expenseType}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  disabled={!selectedExpenseType}
+                  value={selectedCategory?.expense_type === selectedExpenseType ? line.category_id ?? "" : ""}
+                  onChange={(event) => {
+                    const nextCategory = categoryById.get(event.target.value);
+                    updateLine(index, { category_id: event.target.value, expense_type: nextCategory?.expense_type ?? selectedExpenseType });
+                  }}
+                >
+                  <option value="">Subcategory</option>
+                  {subcategories.map((category) => (
+                    <option value={category.id} key={category.id}>
+                      {category.category_code ? `${category.category_name} (${category.category_code})` : category.category_name}
+                    </option>
+                  ))}
+                </select>
+                <input type="number" min="0" step="1" value={line.quantity} onChange={(event) => updateLine(index, { quantity: Number(event.target.value) })} />
+                <input value={line.unit} onChange={(event) => updateLine(index, { unit: event.target.value })} />
+                <input type="number" min="0" step="1" value={line.rate} onChange={(event) => updateLine(index, { rate: Number(event.target.value) })} />
+                <select value={line.vat_rate} onChange={(event) => updateLine(index, { vat_rate: Number(event.target.value) })}>
+                  <option value={20}>VAT 20%</option>
+                  <option value={5}>VAT 5%</option>
+                  <option value={0}>No VAT</option>
+                </select>
+                <strong>{money(line.quantity * line.rate)}</strong>
+                <button type="button" className="icon-button danger" onClick={() => setLines(lines.filter((_, lineIndex) => lineIndex !== index))} title="Remove line">
+                  <Trash2 size={16} />
+                </button>
+              </div>
+            );
+          })}
         </div>
 
         <div className="form-grid">

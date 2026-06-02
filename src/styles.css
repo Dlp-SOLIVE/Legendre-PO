@@ -543,7 +543,7 @@ th {
   align-items: center;
   display: grid;
   gap: 8px;
-  grid-template-columns: minmax(100px, 1fr) minmax(220px, 3fr) minmax(150px, 1.4fr) 80px 86px 100px 110px 96px 40px;
+  grid-template-columns: minmax(90px, 0.8fr) minmax(190px, 2.2fr) minmax(145px, 1.2fr) minmax(170px, 1.6fr) 76px 80px 95px 105px 88px 40px;
   margin-bottom: 8px;
 }
 
