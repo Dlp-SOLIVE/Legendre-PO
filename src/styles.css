@@ -683,7 +683,7 @@ th {
 }
 
 .po-meta-grid {
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: minmax(42mm, 1.45fr) repeat(3, 1fr);
 }
 
 .po-meta-grid div,
@@ -705,6 +705,13 @@ th {
   font-style: normal;
   font-weight: 700;
   margin-top: 2px;
+}
+
+.po-number-cell strong {
+  display: block;
+  font-size: 12px;
+  line-height: 1.15;
+  white-space: nowrap;
 }
 
 .po-info-grid,
@@ -1082,6 +1089,7 @@ th {
 
   .po-meta-grid {
     gap: 6px;
+    grid-template-columns: minmax(44mm, 1.5fr) repeat(3, 1fr);
   }
 
   .po-meta-grid div,
@@ -1095,6 +1103,11 @@ th {
 
   .po-meta-grid strong {
     font-size: 10px;
+  }
+
+  .po-number-cell strong {
+    font-size: 8.5px;
+    line-height: 1.1;
   }
 
   .po-meta-grid em {

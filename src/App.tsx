@@ -2001,7 +2001,7 @@ function PurchaseOrderPreview({ po, company }: { po: PurchaseOrder; company: Rec
         </header>
         <h2 className="po-title">Purchase Order</h2>
         <section className="po-meta-grid">
-          <div>
+          <div className="po-number-cell">
             <span>Number</span>
             <strong>{po.po_number}</strong>
           </div>
