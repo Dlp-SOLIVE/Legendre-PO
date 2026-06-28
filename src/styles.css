@@ -666,6 +666,14 @@ th {
   text-transform: uppercase;
 }
 
+.po-meta-grid em {
+  display: block;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 700;
+  margin-top: 2px;
+}
+
 .po-info-grid,
 .po-bottom-grid {
   grid-template-columns: 1fr 1fr;
@@ -1035,6 +1043,11 @@ th {
 
   .po-meta-grid strong {
     font-size: 10px;
+  }
+
+  .po-meta-grid em {
+    font-size: 9px;
+    margin-top: 1px;
   }
 
   .po-info-grid,

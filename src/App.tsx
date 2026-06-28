@@ -221,6 +221,7 @@ function ProcurementShell({ session }: { session: Session }) {
       status: "draft",
       po_date: isoToday(),
       delivery_date: po.delivery_date,
+      delivery_time: po.delivery_time,
       delivery_address: po.delivery_address,
       supplier_contact_name: po.supplier_contact_name,
       supplier_email: po.supplier_email,
@@ -1532,6 +1533,19 @@ const DEFAULT_OFFLOADING_INSTRUCTIONS = "By hand during site delivery hours.";
 const DEFAULT_DELIVERY_INSTRUCTIONS =
   "Please call site contact 30 minutes prior to arrival. All drivers must be aware of the site and delivery rules as per the Driver's Leaflet.";
 
+const DELIVERY_TIME_OPTIONS = [
+  "",
+  "TBC",
+  "Any time",
+  "Morning",
+  "Afternoon",
+  "Before 10:00",
+  "10:00 - 12:00",
+  "12:00 - 14:00",
+  "14:00 - 16:00",
+  "After 16:00",
+];
+
 type PurchaseOrderLineDraft = PurchaseOrderLineItem & {
   expense_type?: string;
 };
@@ -1588,6 +1602,7 @@ function POForm({
   const [form, setForm] = useState({
     po_date: editingPurchaseOrder?.po_date ?? isoToday(),
     delivery_date: editingPurchaseOrder?.delivery_date ?? "",
+    delivery_time: editingPurchaseOrder?.delivery_time ?? "",
     delivery_address:
       editingPurchaseOrder?.delivery_address ??
       initialProject?.default_delivery_address ??
@@ -1673,6 +1688,7 @@ function POForm({
       status: editingPurchaseOrder?.status ?? "draft",
       po_date: form.po_date,
       delivery_date: form.delivery_date || null,
+      delivery_time: form.delivery_time || null,
       delivery_address: form.delivery_address || null,
       supplier_contact_name: supplier.contact_name,
       supplier_email: supplier.email,
@@ -1753,6 +1769,17 @@ function POForm({
           <label>
             Delivery date
             <input type="date" value={form.delivery_date} onChange={(event) => setForm({ ...form, delivery_date: event.target.value })} />
+          </label>
+          <label>
+            Delivery time
+            <select value={form.delivery_time} onChange={(event) => setForm({ ...form, delivery_time: event.target.value })}>
+              <option value="">Select time</option>
+              {DELIVERY_TIME_OPTIONS.filter(Boolean).map((option) => (
+                <option value={option} key={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
           </label>
           <label className="wide">
             Delivery / site address
@@ -1957,6 +1984,7 @@ function PurchaseOrderPreview({ po, company }: { po: PurchaseOrder; company: Rec
           <div>
             <span>Delivery date</span>
             <strong>{shortDate(po.delivery_date)}</strong>
+            {po.delivery_time && <em>{po.delivery_time}</em>}
           </div>
         </section>
         <section className="po-info-grid">
@@ -2151,10 +2179,12 @@ function Exports({ references, purchaseOrders }: { references: ReferenceData; pu
       action: () =>
         downloadCsv(
           "legendre-purchase-orders.csv",
-          ["PO number", "Date", "Status", "Project", "Supplier", "Subtotal", "VAT", "Total"],
+          ["PO number", "Date", "Delivery date", "Delivery time", "Status", "Project", "Supplier", "Subtotal", "VAT", "Total"],
           purchaseOrders.map((po) => [
             po.po_number,
             po.po_date,
+            po.delivery_date,
+            po.delivery_time,
             po.status,
             po.project?.project_name,
             po.supplier?.supplier_name,

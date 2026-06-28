@@ -197,6 +197,7 @@ export type PurchaseOrderDraft = {
   status: PurchaseOrderStatus;
   po_date: string;
   delivery_date: string | null;
+  delivery_time: string | null;
   delivery_address: string | null;
   supplier_contact_name: string | null;
   supplier_email: string | null;
