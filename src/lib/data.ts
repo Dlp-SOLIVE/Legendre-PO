@@ -13,18 +13,13 @@ import type {
   Supplier,
 } from "../types";
 
-const poSelect = `
-  *,
-  supplier:suppliers(*),
-  project:projects(*),
-  requester:staff_members!purchase_orders_requester_id_fkey(*),
-  category:cost_categories(*),
-  line_items:purchase_order_line_items(*, category:cost_categories(*))
-`;
-
 function requireClient() {
   if (!supabase) throw new Error("Supabase environment variables are not configured.");
   return supabase;
+}
+
+function mapById<T extends { id: string }>(rows: T[]) {
+  return new Map(rows.map((row) => [row.id, row]));
 }
 
 export async function loadReferenceData(): Promise<ReferenceData> {
@@ -54,18 +49,49 @@ export async function loadReferenceData(): Promise<ReferenceData> {
 
 export async function loadPurchaseOrders(): Promise<PurchaseOrder[]> {
   const client = requireClient();
-  const { data, error } = await client
-    .from("purchase_orders")
-    .select(poSelect)
-    .order("po_date", { ascending: false })
-    .order("created_at", { ascending: false });
+  const [purchaseOrders, lineItems, suppliers, projects, staff, categories] = await Promise.all([
+    client
+      .from("purchase_orders")
+      .select("*")
+      .order("po_date", { ascending: false })
+      .order("created_at", { ascending: false }),
+    client.from("purchase_order_line_items").select("*").order("sort_order", { ascending: true }),
+    client.from("suppliers").select("*"),
+    client.from("projects").select("*"),
+    client.from("staff_members").select("*"),
+    client.from("cost_categories").select("*"),
+  ]);
 
-  if (error) throw error;
+  for (const result of [purchaseOrders, lineItems, suppliers, projects, staff, categories]) {
+    if (result.error) throw result.error;
+  }
 
-  return (data ?? []).map((po) => ({
+  const supplierById = mapById((suppliers.data ?? []) as Supplier[]);
+  const projectById = mapById((projects.data ?? []) as Project[]);
+  const staffById = mapById((staff.data ?? []) as StaffMember[]);
+  const categoryById = mapById((categories.data ?? []) as CostCategory[]);
+  const lineItemsByPurchaseOrderId = new Map<string, PurchaseOrderLineItem[]>();
+
+  ((lineItems.data ?? []) as PurchaseOrderLineItem[]).forEach((lineItem) => {
+    if (!lineItem.purchase_order_id) return;
+
+    const lineWithCategory: PurchaseOrderLineItem = {
+      ...lineItem,
+      category: lineItem.category_id ? categoryById.get(lineItem.category_id) ?? null : null,
+    };
+    const current = lineItemsByPurchaseOrderId.get(lineItem.purchase_order_id) ?? [];
+    current.push(lineWithCategory);
+    lineItemsByPurchaseOrderId.set(lineItem.purchase_order_id, current);
+  });
+
+  return ((purchaseOrders.data ?? []) as PurchaseOrder[]).map((po) => ({
     ...po,
-    line_items: [...(po.line_items ?? [])].sort((a, b) => a.sort_order - b.sort_order),
-  })) as PurchaseOrder[];
+    supplier: supplierById.get(po.supplier_id) ?? null,
+    project: projectById.get(po.project_id) ?? null,
+    requester: po.requester_id ? staffById.get(po.requester_id) ?? null : null,
+    category: po.category_id ? categoryById.get(po.category_id) ?? null : null,
+    line_items: [...(lineItemsByPurchaseOrderId.get(po.id) ?? [])].sort((a, b) => a.sort_order - b.sort_order),
+  }));
 }
 
 export async function upsertSupplier(payload: Partial<Supplier>) {
