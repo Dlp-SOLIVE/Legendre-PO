@@ -1638,7 +1638,7 @@ function POForm({
             activeCategories.find((category) => category.id === (line.category_id ?? editingPurchaseOrder.category_id))?.expense_type ??
             "",
         }))
-      : [{ sort_order: 1, item_ref: "", description: "", quantity: 1, unit: "each", rate: 0, vat_rate: 20, category_id: "", expense_type: "" }]),
+      : [{ sort_order: 1, item_ref: "", description: "", quantity: 1, unit: "each", rate: 0, vat_rate: 23, category_id: "", expense_type: "" }]),
   ]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -1805,7 +1805,7 @@ function POForm({
         <div className="line-editor">
           <div className="section-heading compact-heading">
             <h2>Line items</h2>
-            <button type="button" onClick={() => setLines([...lines, { sort_order: lines.length + 1, item_ref: "", description: "", quantity: 1, unit: "each", rate: 0, vat_rate: 20, category_id: "", expense_type: "" }])}>
+            <button type="button" onClick={() => setLines([...lines, { sort_order: lines.length + 1, item_ref: "", description: "", quantity: 1, unit: "each", rate: 0, vat_rate: 23, category_id: "", expense_type: "" }])}>
               <Plus size={16} />
               Add line
             </button>
@@ -1860,9 +1860,10 @@ function POForm({
                 <input value={line.unit} onChange={(event) => updateLine(index, { unit: event.target.value })} />
                 <input type="number" min="0" step="1" value={line.rate} onChange={(event) => updateLine(index, { rate: Number(event.target.value) })} />
                 <select value={line.vat_rate} onChange={(event) => updateLine(index, { vat_rate: Number(event.target.value) })}>
-                  <option value={20}>VAT 20%</option>
-                  <option value={5}>VAT 5%</option>
-                  <option value={0}>No VAT</option>
+                  <option value={23}>IVA 23%</option>
+                  <option value={13}>IVA 13%</option>
+                  <option value={6}>IVA 6%</option>
+                  <option value={0}>Isento</option>
                 </select>
                 <strong>{money(line.quantity * line.rate)}</strong>
                 <button type="button" className="icon-button danger" onClick={() => setLines(lines.filter((_, lineIndex) => lineIndex !== index))} title="Remove line">
