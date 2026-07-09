@@ -1,13 +1,13 @@
 export function money(value: number | null | undefined) {
-  return new Intl.NumberFormat("en-GB", {
+  return new Intl.NumberFormat("pt-PT", {
     style: "currency",
-    currency: "GBP",
+    currency: "EUR",
   }).format(Number(value ?? 0));
 }
 
 export function shortDate(value: string | null | undefined) {
   if (!value) return "";
-  return new Intl.DateTimeFormat("en-GB").format(new Date(`${value}T00:00:00`));
+  return new Intl.DateTimeFormat("pt-PT").format(new Date(`${value}T00:00:00`));
 }
 
 export function isoToday() {
