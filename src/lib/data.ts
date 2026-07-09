@@ -320,3 +320,141 @@ export function roleCanWritePo(role: AppRole | null | undefined) {
 export function normalizeRole(role: AppRole | null | undefined): AppRole {
   return role === "standard" ? "user" : role ?? "viewer";
 }
+
+
+// ─────────────────────────────────────────────
+// LOTE 3B — Guias de transporte, Faturas, Reconciliação
+// ─────────────────────────────────────────────
+
+export async function loadDeliveryNotes(purchaseOrderId: string) {
+  const client = requireClient();
+  const { data: notes, error } = await client
+    .from("delivery_notes")
+    .select("*")
+    .eq("purchase_order_id", purchaseOrderId)
+    .order("delivery_date", { ascending: true });
+  if (error) throw error;
+
+  const noteIds = (notes ?? []).map((n) => n.id);
+  let lines: any[] = [];
+  if (noteIds.length) {
+    const { data: lineData, error: lineError } = await client
+      .from("delivery_note_lines")
+      .select("*")
+      .in("delivery_note_id", noteIds);
+    if (lineError) throw lineError;
+    lines = lineData ?? [];
+  }
+  return (notes ?? []).map((n) => ({
+    ...n,
+    lines: lines.filter((l) => l.delivery_note_id === n.id),
+  }));
+}
+
+export async function loadSupplierInvoices(purchaseOrderId: string) {
+  const client = requireClient();
+  const { data: invoices, error } = await client
+    .from("supplier_invoices")
+    .select("*")
+    .eq("purchase_order_id", purchaseOrderId)
+    .order("invoice_date", { ascending: true });
+  if (error) throw error;
+
+  const ids = (invoices ?? []).map((i) => i.id);
+  let lines: any[] = [];
+  if (ids.length) {
+    const { data: lineData, error: lineError } = await client
+      .from("supplier_invoice_lines")
+      .select("*")
+      .in("invoice_id", ids);
+    if (lineError) throw lineError;
+    lines = lineData ?? [];
+  }
+  return (invoices ?? []).map((i) => ({
+    ...i,
+    lines: lines.filter((l) => l.invoice_id === i.id),
+  }));
+}
+
+export async function loadReconciliation(purchaseOrderId: string) {
+  const client = requireClient();
+  const { data, error } = await client
+    .from("v_line_reconciliation")
+    .select("*")
+    .eq("purchase_order_id", purchaseOrderId);
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function loadAccrualsByProjectMonth() {
+  const client = requireClient();
+  const { data, error } = await client
+    .from("v_accruals_by_project_month")
+    .select("*")
+    .order("month", { ascending: false });
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function createDeliveryNote(
+  purchaseOrderId: string,
+  header: { guia_number: string | null; delivery_date: string; notes: string | null },
+  lines: { line_item_id: string; quantity_received: number }[],
+) {
+  const client = requireClient();
+  const { data: note, error } = await client
+    .from("delivery_notes")
+    .insert({ purchase_order_id: purchaseOrderId, ...header })
+    .select()
+    .single();
+  if (error) throw error;
+
+  const toInsert = lines
+    .filter((l) => l.quantity_received > 0)
+    .map((l) => ({ delivery_note_id: note.id, line_item_id: l.line_item_id, quantity_received: l.quantity_received }));
+  if (toInsert.length) {
+    const { error: lineError } = await client.from("delivery_note_lines").insert(toInsert);
+    if (lineError) throw lineError;
+  }
+  return note.id as string;
+}
+
+export async function createSupplierInvoice(
+  purchaseOrderId: string,
+  header: { invoice_number: string | null; invoice_date: string; notes: string | null },
+  lines: { line_item_id: string; quantity_invoiced: number; unit_price_invoiced: number }[],
+) {
+  const client = requireClient();
+  const { data: invoice, error } = await client
+    .from("supplier_invoices")
+    .insert({ purchase_order_id: purchaseOrderId, ...header })
+    .select()
+    .single();
+  if (error) throw error;
+
+  const toInsert = lines
+    .filter((l) => l.quantity_invoiced > 0)
+    .map((l) => ({
+      invoice_id: invoice.id,
+      line_item_id: l.line_item_id,
+      quantity_invoiced: l.quantity_invoiced,
+      unit_price_invoiced: l.unit_price_invoiced,
+    }));
+  if (toInsert.length) {
+    const { error: lineError } = await client.from("supplier_invoice_lines").insert(toInsert);
+    if (lineError) throw lineError;
+  }
+  return invoice.id as string;
+}
+
+export async function deleteDeliveryNote(id: string) {
+  const client = requireClient();
+  const { error } = await client.from("delivery_notes").delete().eq("id", id);
+  if (error) throw error;
+}
+
+export async function deleteSupplierInvoice(id: string) {
+  const client = requireClient();
+  const { error } = await client.from("supplier_invoices").delete().eq("id", id);
+  if (error) throw error;
+}
