@@ -20,6 +20,7 @@ export type Project = {
   id: string;
   project_name: string;
   project_code: string;
+  adj_code: string | null;
   site_address: string | null;
   cost_centre_code: string | null;
   default_delivery_address: string | null;
@@ -80,6 +81,7 @@ export type PurchaseOrderLineItem = {
   quantity: number;
   unit: string;
   rate: number;
+  discount_pct: number;
   vat_rate: number;
   category_id: string | null;
   line_total?: number;
@@ -99,6 +101,8 @@ export type PurchaseOrder = {
   po_date: string;
   delivery_date: string | null;
   delivery_time: string | null;
+  payment_terms: string | null;
+  invoice_project_code: string | null;
   delivery_address: string | null;
   supplier_contact_name: string | null;
   supplier_email: string | null;
