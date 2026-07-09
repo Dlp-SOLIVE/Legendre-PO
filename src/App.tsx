@@ -222,6 +222,8 @@ function ProcurementShell({ session }: { session: Session }) {
       category_id: null,
       status: "draft",
       po_date: isoToday(),
+      payment_terms: po.payment_terms,
+      invoice_project_code: po.invoice_project_code,
       delivery_date: po.delivery_date,
       delivery_time: po.delivery_time,
       delivery_address: po.delivery_address,
@@ -242,6 +244,7 @@ function ProcurementShell({ session }: { session: Session }) {
         quantity: Number(line.quantity),
         unit: line.unit,
         rate: Number(line.rate),
+        discount_pct: Number(line.discount_pct ?? 0),
         vat_rate: Number(line.vat_rate),
         item_ref: line.item_ref ?? null,
         category_id: line.category_id ?? po.category_id ?? null,
@@ -389,6 +392,7 @@ function ProcurementShell({ session }: { session: Session }) {
                 fields={[
                   { name: "project_name", label: "Project name", required: true },
                   { name: "project_code", label: "Project code / initials", required: true },
+                  { name: "adj_code", label: "Código ADJ (3 letras, ex: URB)" },
                   { name: "site_address", label: "Site address", type: "textarea" },
                   { name: "cost_centre_code", label: "Cost centre code" },
                   { name: "site_contact_name", label: "Site contact name" },
@@ -1537,6 +1541,7 @@ const DEFAULT_OFFLOADING_INSTRUCTIONS = "By hand during site delivery hours.";
 const DEFAULT_DELIVERY_INSTRUCTIONS =
   "Please call site contact 30 minutes prior to arrival. All drivers must be aware of the site and delivery rules as per the Driver's Leaflet.";
 
+const PAYMENT_TERMS_OPTIONS = ["Pronto pagamento", "Fatura a 30 dias", "Fatura a 60 dias"];
 const DELIVERY_TIME_OPTIONS = [
   "",
   "TBC",
@@ -1605,6 +1610,8 @@ function POForm({
   const defaultSiteContact = formatProjectSiteContact(initialProject);
   const [form, setForm] = useState({
     po_date: editingPurchaseOrder?.po_date ?? isoToday(),
+    payment_terms: editingPurchaseOrder?.payment_terms ?? "Fatura a 30 dias",
+    invoice_project_code: editingPurchaseOrder?.invoice_project_code ?? "",
     delivery_date: editingPurchaseOrder?.delivery_date ?? "",
     delivery_time: editingPurchaseOrder?.delivery_time ?? "",
     delivery_address:
@@ -1631,6 +1638,7 @@ function POForm({
           quantity: Number(line.quantity),
           unit: line.unit,
           rate: Number(line.rate),
+          discount_pct: Number(line.discount_pct ?? 0),
           vat_rate: Number(line.vat_rate),
           category_id: line.category_id ?? editingPurchaseOrder.category_id ?? "",
           expense_type:
@@ -1638,15 +1646,15 @@ function POForm({
             activeCategories.find((category) => category.id === (line.category_id ?? editingPurchaseOrder.category_id))?.expense_type ??
             "",
         }))
-      : [{ sort_order: 1, item_ref: "", description: "", quantity: 1, unit: "each", rate: 0, vat_rate: 23, category_id: "", expense_type: "" }]),
+      : [{ sort_order: 1, item_ref: "", description: "", quantity: 1, unit: "each", rate: 0, discount_pct: 0, vat_rate: 23, category_id: "", expense_type: "" }]),
   ]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   const supplier = references.suppliers.find((item) => item.id === supplierId) ?? null;
   const project = references.projects.find((item) => item.id === projectId) ?? null;
-  const subtotal = lines.reduce((sum, item) => sum + item.quantity * item.rate, 0);
-  const vatTotal = lines.reduce((sum, item) => sum + item.quantity * item.rate * (item.vat_rate / 100), 0);
+  const subtotal = lines.reduce((sum, item) => sum + item.quantity * item.rate * (1 - (item.discount_pct ?? 0) / 100), 0);
+  const vatTotal = lines.reduce((sum, item) => sum + item.quantity * item.rate * (1 - (item.discount_pct ?? 0) / 100) * (item.vat_rate / 100), 0);
 
   function updateLine(index: number, patch: Partial<PurchaseOrderLineDraft>) {
     setLines((current) => current.map((line, lineIndex) => (lineIndex === index ? { ...line, ...patch } : line)));
@@ -1693,6 +1701,8 @@ function POForm({
       category_id: null,
       status: editingPurchaseOrder?.status ?? "draft",
       po_date: form.po_date,
+      payment_terms: form.payment_terms || null,
+      invoice_project_code: form.invoice_project_code || null,
       delivery_date: form.delivery_date || null,
       delivery_time: form.delivery_time || null,
       delivery_address: form.delivery_address || null,
@@ -1775,6 +1785,34 @@ function POForm({
             <input type="date" value={form.po_date} onChange={(event) => setForm({ ...form, po_date: event.target.value })} />
           </label>
           <label>
+            Condições de pagamento
+            <select
+              value={PAYMENT_TERMS_OPTIONS.includes(form.payment_terms) ? form.payment_terms : "__outro__"}
+              onChange={(event) => setForm({ ...form, payment_terms: event.target.value === "__outro__" ? "" : event.target.value })}
+            >
+              {PAYMENT_TERMS_OPTIONS.map((option) => (
+                <option value={option} key={option}>{option}</option>
+              ))}
+              <option value="__outro__">Outro (especificar)</option>
+            </select>
+            {!PAYMENT_TERMS_OPTIONS.includes(form.payment_terms) && (
+              <input
+                placeholder="Especificar condições"
+                value={form.payment_terms}
+                onChange={(event) => setForm({ ...form, payment_terms: event.target.value })}
+                style={{ marginTop: "6px" }}
+              />
+            )}
+          </label>
+          <label>
+            Código de obra na fatura
+            <input
+              placeholder="ex: 24-26256"
+              value={form.invoice_project_code}
+              onChange={(event) => setForm({ ...form, invoice_project_code: event.target.value })}
+            />
+          </label>
+          <label>
             Delivery date
             <input type="date" value={form.delivery_date} onChange={(event) => setForm({ ...form, delivery_date: event.target.value })} />
           </label>
@@ -1805,7 +1843,7 @@ function POForm({
         <div className="line-editor">
           <div className="section-heading compact-heading">
             <h2>Line items</h2>
-            <button type="button" onClick={() => setLines([...lines, { sort_order: lines.length + 1, item_ref: "", description: "", quantity: 1, unit: "each", rate: 0, vat_rate: 23, category_id: "", expense_type: "" }])}>
+            <button type="button" onClick={() => setLines([...lines, { sort_order: lines.length + 1, item_ref: "", description: "", quantity: 1, unit: "each", rate: 0, discount_pct: 0, vat_rate: 23, category_id: "", expense_type: "" }])}>
               <Plus size={16} />
               Add line
             </button>
@@ -1818,6 +1856,7 @@ function POForm({
             <span>Unit numbers</span>
             <span>Unit</span>
             <span>Unit price</span>
+            <span>Desc. %</span>
             <span>VAT</span>
             <span>Total</span>
             <span />
@@ -1859,13 +1898,14 @@ function POForm({
                 <input type="number" min="0" step="1" value={line.quantity} onChange={(event) => updateLine(index, { quantity: Number(event.target.value) })} />
                 <input value={line.unit} onChange={(event) => updateLine(index, { unit: event.target.value })} />
                 <input type="number" min="0" step="1" value={line.rate} onChange={(event) => updateLine(index, { rate: Number(event.target.value) })} />
+                <input type="number" min="0" max="100" step="0.5" value={line.discount_pct ?? 0} onChange={(event) => updateLine(index, { discount_pct: Number(event.target.value) })} />
                 <select value={line.vat_rate} onChange={(event) => updateLine(index, { vat_rate: Number(event.target.value) })}>
                   <option value={23}>IVA 23%</option>
                   <option value={13}>IVA 13%</option>
                   <option value={6}>IVA 6%</option>
                   <option value={0}>Isento</option>
                 </select>
-                <strong>{money(line.quantity * line.rate)}</strong>
+                <strong>{money(line.quantity * line.rate * (1 - (line.discount_pct ?? 0) / 100))}</strong>
                 <button type="button" className="icon-button danger" onClick={() => setLines(lines.filter((_, lineIndex) => lineIndex !== index))} title="Remove line">
                   <Trash2 size={16} />
                 </button>
@@ -1955,7 +1995,7 @@ function PreviewModal({ po, settings, onClose }: { po: PurchaseOrder; settings: 
   function printPurchaseOrder() {
     const previousTitle = document.title;
     const cleanPoNumber = po.po_number.replace(/[\\/:*?"<>|]+/g, "-");
-    document.title = `${cleanPoNumber} - Legendre UK Purchase Order`;
+    document.title = `${cleanPoNumber} - Nota de Encomenda Legendre`;
 
     const restoreTitle = () => {
       document.title = previousTitle;
@@ -1987,17 +2027,23 @@ function PreviewModal({ po, settings, onClose }: { po: PurchaseOrder; settings: 
 }
 
 function PurchaseOrderPreview({ po, company }: { po: PurchaseOrder; company: Record<string, string> }) {
-  const invoiceEmail = company.accounts_email ?? "leguk.accounts@groupe-legendre.com";
+  const invoiceEmail = company.accounts_email ?? "";
   return (
     <div className="print-area">
       <article className="po-page po-order-page">
         <header className="po-header">
           <img className="po-logo-image" src={legendreLogo} alt="Legendre" />
           <div className="po-company">
-            <strong>{company.name ?? "Legendre UK Limited"}</strong>
-            <span>{company.address ?? "Ground Floor, Peer House, 8-14 Verulam Street, London, WC1X 8LZ"}</span>
-            <span>{company.phone ?? "+44 (0) 2035 538420"}</span>
-            <span>{company.email ?? "uk@groupe-legendre.com"}</span>
+            <strong>{company.name ?? "Legendre"}</strong>
+            {(company.legal_name ?? "LEGDR Engenharia e Construção, Lda") && (
+              <span>{company.legal_name ?? "LEGDR Engenharia e Construção, Lda"}</span>
+            )}
+            {(company.vat_number ?? "") && (
+              <span>NIF: {company.vat_number}</span>
+            )}
+            <span>{company.address ?? ""}</span>
+            <span>{company.phone ?? ""}</span>
+            <span>{company.email ?? ""}</span>
           </div>
         </header>
         <h2 className="po-title">Purchase Order</h2>
