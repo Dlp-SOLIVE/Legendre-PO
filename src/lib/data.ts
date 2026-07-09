@@ -222,6 +222,8 @@ export type PurchaseOrderDraft = {
   category_id: string | null;
   status: PurchaseOrderStatus;
   po_date: string;
+  payment_terms: string | null;
+  invoice_project_code: string | null;
   delivery_date: string | null;
   delivery_time: string | null;
   delivery_address: string | null;
