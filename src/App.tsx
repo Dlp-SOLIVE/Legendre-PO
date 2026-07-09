@@ -121,7 +121,7 @@ export function App() {
   }, []);
 
   if (!hasSupabaseConfig) return <SetupScreen />;
-  if (!authReady) return <FullScreenMessage title="Opening procurement system" />;
+  if (!authReady) return <FullScreenMessage title="A abrir o sistema de compras" />;
   if (passwordRecovery && session) return <ResetPasswordScreen onDone={() => setPasswordRecovery(false)} />;
   if (!session) return <LoginScreen />;
 
@@ -186,14 +186,14 @@ function ProcurementShell({ session }: { session: Session }) {
       await validatePurchaseOrder(po.id);
       await refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to validate purchase order.");
+      setError(err instanceof Error ? err.message : "Não foi possível validar a adjudicação.");
     }
   }
 
   async function handleDeletePurchaseOrder(po: PurchaseOrder) {
     if (po.status !== "draft") return;
     if (po.requester_id !== currentStaff?.id) {
-      setError("Only the person who created this draft purchase order can delete it.");
+      setError("Só a pessoa que criou este rascunho de adjudicação o pode eliminar.");
       return;
     }
     const confirmed = window.confirm(`Delete draft purchase order ${po.po_number}? This cannot be undone.`);
@@ -204,7 +204,7 @@ function ProcurementShell({ session }: { session: Session }) {
       await deletePurchaseOrder(po.id, currentStaff.id);
       await refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to delete purchase order.");
+      setError(err instanceof Error ? err.message : "Não foi possível eliminar a adjudicação.");
     }
   }
 
@@ -258,7 +258,7 @@ function ProcurementShell({ session }: { session: Session }) {
       if (copiedPurchaseOrder) setPreviewPurchaseOrder(copiedPurchaseOrder);
       setView("purchase-orders");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to copy purchase order.");
+      setError(err instanceof Error ? err.message : "Não foi possível copiar a adjudicação.");
     }
   }
 
@@ -267,15 +267,15 @@ function ProcurementShell({ session }: { session: Session }) {
   }, []);
 
   const navItems: NavItem[] = [
-    { key: "dashboard", label: "Dashboard", icon: BarChart3 },
-    { key: "purchase-orders", label: "Purchase Orders", icon: ClipboardList },
-    { key: "new-po", label: "New PO", icon: FilePlus2, disabled: !canWritePo },
-    { key: "suppliers", label: "Suppliers", icon: Package, disabled: !canManageSuppliers },
-    { key: "projects", label: "Projects", icon: Building2, disabled: !canAdmin },
-    { key: "staff", label: "Staff", icon: Users, disabled: !currentStaff?.is_active },
-    { key: "categories", label: "Categories", icon: Archive, disabled: !canAdmin },
-    { key: "settings", label: "Settings", icon: Settings, disabled: !canAdmin },
-    { key: "exports", label: "Exports", icon: Download },
+    { key: "dashboard", label: "Painel", icon: BarChart3 },
+    { key: "purchase-orders", label: "Adjudicações", icon: ClipboardList },
+    { key: "new-po", label: "Nova Adjudicação", icon: FilePlus2, disabled: !canWritePo },
+    { key: "suppliers", label: "Fornecedores", icon: Package, disabled: !canManageSuppliers },
+    { key: "projects", label: "Obras", icon: Building2, disabled: !canAdmin },
+    { key: "staff", label: "Equipa", icon: Users, disabled: !currentStaff?.is_active },
+    { key: "categories", label: "Categorias", icon: Archive, disabled: !canAdmin },
+    { key: "settings", label: "Definições", icon: Settings, disabled: !canAdmin },
+    { key: "exports", label: "Exportações", icon: Download },
   ];
 
   return (
@@ -283,7 +283,7 @@ function ProcurementShell({ session }: { session: Session }) {
       <aside className="sidebar">
         <div className="brand-lockup">
           <img className="brand-logo" src={legendreLogo} alt="Legendre" />
-          <span>Procurement System</span>
+          <span>Sistema de Compras</span>
         </div>
         <nav>
           {navItems.map((item) => {
@@ -297,7 +297,7 @@ function ProcurementShell({ session }: { session: Session }) {
                   if (item.key === "new-po") setEditingPurchaseOrder(null);
                   setView(item.key);
                 }}
-                title={item.disabled ? "Admin access required" : item.label}
+                title={item.disabled ? "Acesso de administrador necessário" : item.label}
               >
                 <Icon size={18} />
                 {item.label}
@@ -310,7 +310,7 @@ function ProcurementShell({ session }: { session: Session }) {
       <main className="workspace">
         <header className="topbar">
           <div>
-            <p className="eyebrow">Internal procurement</p>
+            <p className="eyebrow">Compras internas</p>
             <h1>{navItems.find((item) => item.key === view)?.label}</h1>
           </div>
           <div className="user-strip">
@@ -319,7 +319,7 @@ function ProcurementShell({ session }: { session: Session }) {
             <button className="icon-button" onClick={refresh} title="Refresh data">
               <RefreshCw size={18} />
             </button>
-            <button className="icon-button" onClick={() => supabase?.auth.signOut()} title="Sign out">
+            <button className="icon-button" onClick={() => supabase?.auth.signOut()} title="Terminar sessão">
               <LogOut size={18} />
             </button>
           </div>
@@ -327,7 +327,7 @@ function ProcurementShell({ session }: { session: Session }) {
 
         {error && <div className="notice error">{error}</div>}
         {loading ? (
-          <FullScreenMessage title="Loading live Supabase data" compact />
+          <FullScreenMessage title="A carregar dados do Supabase" compact />
         ) : !currentStaff?.is_active ? (
           <PendingAccessScreen email={session.user.email ?? ""} staff={currentStaff} onSignOut={() => supabase?.auth.signOut()} />
         ) : (
@@ -363,18 +363,18 @@ function ProcurementShell({ session }: { session: Session }) {
             )}
             {view === "suppliers" && (
               <AdminPanel
-                title="Suppliers"
+                title="Fornecedores"
                 rows={references.suppliers}
                 identity="supplier_name"
                 fields={[
-                  { name: "supplier_name", label: "Supplier name", required: true },
-                  { name: "account_code", label: "Account code" },
-                  { name: "contact_name", label: "Contact name" },
+                  { name: "supplier_name", label: "Nome do fornecedor", required: true },
+                  { name: "account_code", label: "Código de conta" },
+                  { name: "contact_name", label: "Nome do contacto" },
                   { name: "email", label: "Email", type: "email" },
-                  { name: "phone", label: "Phone number" },
-                  { name: "address", label: "Address", type: "textarea" },
-                  { name: "notes", label: "Notes", type: "textarea" },
-                  { name: "is_active", label: "Active", type: "checkbox" },
+                  { name: "phone", label: "Telefone" },
+                  { name: "address", label: "Morada", type: "textarea" },
+                  { name: "notes", label: "Notas", type: "textarea" },
+                  { name: "is_active", label: "Ativo", type: "checkbox" },
                 ]}
                 onSave={upsertSupplier}
                 onDelete={(id) => deleteRow("suppliers", id)}
@@ -386,21 +386,21 @@ function ProcurementShell({ session }: { session: Session }) {
             )}
             {view === "projects" && (
               <AdminPanel
-                title="Projects / Sites"
+                title="Obras"
                 rows={references.projects}
                 identity="project_name"
                 fields={[
-                  { name: "project_name", label: "Project name", required: true },
-                  { name: "project_code", label: "Project code / initials", required: true },
+                  { name: "project_name", label: "Nome da obra", required: true },
+                  { name: "project_code", label: "Código da obra / iniciais", required: true },
                   { name: "adj_code", label: "Código ADJ (3 letras, ex: URB)" },
-                  { name: "site_address", label: "Site address", type: "textarea" },
-                  { name: "cost_centre_code", label: "Cost centre code" },
-                  { name: "site_contact_name", label: "Site contact name" },
-                  { name: "site_contact_phone", label: "Site contact phone" },
-                  { name: "default_vehicle_requirements", label: "Default vehicle requirements", type: "textarea" },
-                  { name: "default_offloading_instructions", label: "Default offloading instructions", type: "textarea" },
-                  { name: "default_delivery_instructions", label: "Default delivery instructions", type: "textarea" },
-                  { name: "is_active", label: "Active", type: "checkbox" },
+                  { name: "site_address", label: "Morada da obra", type: "textarea" },
+                  { name: "cost_centre_code", label: "Código de centro de custo" },
+                  { name: "site_contact_name", label: "Nome do contacto na obra" },
+                  { name: "site_contact_phone", label: "Telefone do contacto na obra" },
+                  { name: "default_vehicle_requirements", label: "Requisitos de veículo (por defeito)", type: "textarea" },
+                  { name: "default_offloading_instructions", label: "Instruções de descarga (por defeito)", type: "textarea" },
+                  { name: "default_delivery_instructions", label: "Instruções de entrega (por defeito)", type: "textarea" },
+                  { name: "is_active", label: "Ativo", type: "checkbox" },
                 ]}
                 onSave={upsertProject}
                 onDelete={(id) => deleteRow("projects", id)}
@@ -412,14 +412,14 @@ function ProcurementShell({ session }: { session: Session }) {
             )}
             {view === "categories" && (
               <AdminPanel
-                title="Cost Categories"
+                title="Categorias de custo"
                 rows={references.categories}
                 identity="category_name"
                 fields={[
-                  { name: "expense_type", label: "Type of expenses", required: true },
-                  { name: "category_name", label: "Detailed type of expenses", required: true },
+                  { name: "expense_type", label: "Tipo de despesa", required: true },
+                  { name: "category_name", label: "Tipo detalhado de despesa", required: true },
                   { name: "category_code", label: "Code", required: true },
-                  { name: "is_active", label: "Active", type: "checkbox" },
+                  { name: "is_active", label: "Ativo", type: "checkbox" },
                 ]}
                 onSave={upsertCategory}
                 onDelete={(id) => deleteRow("cost_categories", id)}
@@ -447,7 +447,7 @@ function ProcurementShell({ session }: { session: Session }) {
 function SetupScreen() {
   return (
     <FullScreenMessage
-      title="Connect Supabase to start"
+      title="Ligar o Supabase para começar"
       detail="Create a .env file from .env.example with VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY, then run the Supabase migration."
     />
   );
@@ -475,7 +475,7 @@ function PendingAccessScreen({
   return (
     <div className="state-message compact">
       <Shield size={30} />
-      <h2>Access pending</h2>
+      <h2>Acesso pendente</h2>
       <p>
         {staff
           ? `${staff.full_name} is registered, but an admin still needs to activate the account and assign project access.`
@@ -504,7 +504,7 @@ function ResetPasswordScreen({ onDone }: { onDone: () => void }) {
       return;
     }
     if (newPassword !== confirmPassword) {
-      setMessage("Passwords do not match.");
+      setMessage("As palavras-passe não coincidem.");
       return;
     }
 
@@ -518,7 +518,7 @@ function ResetPasswordScreen({ onDone }: { onDone: () => void }) {
       return;
     }
 
-    setMessage("Password updated. Please sign in with your new password.");
+    setMessage("Palavra-passe atualizada. Entre com a nova palavra-passe.");
     setUpdated(true);
   }
 
@@ -532,7 +532,7 @@ function ResetPasswordScreen({ onDone }: { onDone: () => void }) {
       <section className="login-panel">
         <div className="brand-lockup large">
           <img className="brand-logo" src={legendreLogo} alt="Legendre" />
-          <span>Procurement System</span>
+          <span>Sistema de Compras</span>
         </div>
         {updated ? (
           <button type="button" onClick={returnToSignIn}>
@@ -601,7 +601,7 @@ function LoginScreen() {
       return;
     }
     if (registrationPassword !== confirmPassword) {
-      setMessage("Passwords do not match.");
+      setMessage("As palavras-passe não coincidem.");
       return;
     }
 
@@ -621,9 +621,9 @@ function LoginScreen() {
       if (error) throw error;
 
       await requestStaffAccess({ email, fullName, initials });
-      setMessage("Account request recorded. An admin must approve your access before you can sign in. If this email already existed, use Forgot password to choose a new password.");
+      setMessage("Pedido de conta registado. Um administrador tem de aprovar o seu acesso antes de poder entrar. Se este email já existia, use \"Esqueci a palavra-passe\" para escolher uma nova.");
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : "Unable to request access.");
+      setMessage(err instanceof Error ? err.message : "Não foi possível pedir acesso.");
     } finally {
       setBusy(false);
     }
@@ -639,7 +639,7 @@ function LoginScreen() {
       redirectTo: window.location.origin,
     });
     setBusy(false);
-    setMessage(error ? error.message : "Password reset email sent. Open the link in that email to choose a new password.");
+    setMessage(error ? error.message : "Email de recuperação enviado. Abra o link nesse email para escolher nova palavra-passe.");
   }
 
   return (
@@ -647,7 +647,7 @@ function LoginScreen() {
       <section className="login-panel">
         <div className="brand-lockup large">
           <img className="brand-logo" src={legendreLogo} alt="Legendre" />
-          <span>Procurement System</span>
+          <span>Sistema de Compras</span>
         </div>
         {mode === "login" ? (
           <>
@@ -791,17 +791,17 @@ function AdminPanel<T extends { id: string; is_active?: boolean } & Record<strin
       setEditing(null);
       await onRefresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to save record.");
+      setError(err instanceof Error ? err.message : "Não foi possível guardar o registo.");
     }
   }
 
   async function remove(id: string) {
-    if (!confirm("Delete this record? Existing purchase orders may prevent deletion.")) return;
+    if (!confirm("Eliminar este registo? Adjudicações existentes podem impedir a eliminação.")) return;
     try {
       await onDelete(id);
       await onRefresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to delete record.");
+      setError(err instanceof Error ? err.message : "Não foi possível eliminar o registo.");
     }
   }
 
@@ -809,7 +809,7 @@ function AdminPanel<T extends { id: string; is_active?: boolean } & Record<strin
     <section className="work-section">
       <div className="section-heading">
         <div>
-          <p className="eyebrow">Admin database</p>
+          <p className="eyebrow">Base de dados (admin)</p>
           <h2>{title}</h2>
         </div>
         {allowCreate && (
@@ -898,7 +898,7 @@ function SettingsPanel({
       setEditing(null);
       await onRefresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Settings must be valid JSON.");
+      setError(err instanceof Error ? err.message : "As definições têm de ser JSON válido.");
     }
   }
 
@@ -906,8 +906,8 @@ function SettingsPanel({
     <section className="work-section">
       <div className="section-heading">
         <div>
-          <p className="eyebrow">Admin database</p>
-          <h2>App Settings</h2>
+          <p className="eyebrow">Base de dados (admin)</p>
+          <h2>Definições da aplicação</h2>
         </div>
         <button onClick={() => setEditing({ setting_key: "", setting_value: {}, description: "" })}>
           <Plus size={16} />
@@ -946,7 +946,7 @@ function SettingsPanel({
         identity="setting_key"
         columns={[
           { key: "setting_key", label: "Key" },
-          { key: "description", label: "Description" },
+          { key: "description", label: "Descrição" },
         ]}
         onEdit={(row) => setEditing(row)}
         onDelete={undefined}
@@ -990,13 +990,13 @@ function StaffAdminView({
   }
 
   function projectSummary(member: StaffMember) {
-    if (normalizeRole(member.role) === "admin") return "All projects";
+    if (normalizeRole(member.role) === "admin") return "Todas as obras";
     const names = references.projectAccess
       .filter((access) => access.staff_member_id === member.id)
       .map((access) => references.projects.find((project) => project.id === access.project_id)?.project_name)
       .filter(Boolean);
 
-    return names.length ? names.join(", ") : "No projects";
+    return names.length ? names.join(", ") : "Sem obras";
   }
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
@@ -1027,18 +1027,18 @@ function StaffAdminView({
       setEditing(null);
       await onRefresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to save profile.");
+      setError(err instanceof Error ? err.message : "Não foi possível guardar o perfil.");
     }
   }
 
   async function remove(id: string) {
     if (!canAdmin) return;
-    if (!confirm("Delete this staff member?")) return;
+    if (!confirm("Eliminar este membro da equipa?")) return;
     try {
       await deleteRow("staff_members", id);
       await onRefresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to delete staff member.");
+      setError(err instanceof Error ? err.message : "Não foi possível eliminar o membro da equipa.");
     }
   }
 
@@ -1046,8 +1046,8 @@ function StaffAdminView({
     <section className="work-section">
       <div className="section-heading">
         <div>
-          <p className="eyebrow">{canAdmin ? "Admin database" : "My account"}</p>
-          <h2>{canAdmin ? "Staff / Users" : "My profile"}</h2>
+          <p className="eyebrow">{canAdmin ? "Base de dados (admin)" : "A minha conta"}</p>
+          <h2>{canAdmin ? "Equipa / Utilizadores" : "O meu perfil"}</h2>
         </div>
         {canAdmin && (
           <button onClick={() => editStaff()}>
@@ -1089,7 +1089,7 @@ function StaffAdminView({
                 <input name="is_active" type="checkbox" defaultChecked={Boolean(editing.is_active)} />
               </label>
               <fieldset className="project-access-list wide">
-                <legend>Project access</legend>
+                <legend>Acesso a obras</legend>
                 {references.projects.map((project) => (
                   <label key={project.id}>
                     <input
@@ -1106,7 +1106,7 @@ function StaffAdminView({
           <div className="button-row wide">
             <button type="submit">
               <Save size={16} />
-              {canAdmin ? "Save access" : "Save profile"}
+              {canAdmin ? "Guardar acesso" : "Guardar perfil"}
             </button>
             <button type="button" className="secondary" onClick={() => setEditing(null)}>
               <X size={16} />
@@ -1119,14 +1119,14 @@ function StaffAdminView({
         <table>
           <thead>
             <tr>
-              <th>Full name</th>
-              <th>Initials</th>
+              <th>Nome completo</th>
+              <th>Iniciais</th>
               <th>Email</th>
-              <th>Phone</th>
-              <th>Role</th>
-              <th>Status</th>
-              <th>Projects</th>
-              <th className="actions-cell">Actions</th>
+              <th>Telefone</th>
+              <th>Função</th>
+              <th>Estado</th>
+              <th>Obras</th>
+              <th className="actions-cell">Ações</th>
             </tr>
           </thead>
           <tbody>
@@ -1137,14 +1137,14 @@ function StaffAdminView({
                 <td>{member.email}</td>
                 <td>{member.phone}</td>
                 <td>{normalizeRole(member.role)}</td>
-                <td>{member.is_active ? "Active" : "Pending"}</td>
+                <td>{member.is_active ? "Ativo" : "Pendente"}</td>
                 <td>{projectSummary(member)}</td>
                 <td className="actions-cell">
-                  <button className="icon-button" onClick={() => editStaff(member)} title="Edit access">
+                  <button className="icon-button" onClick={() => editStaff(member)} title="Editar acesso">
                     <Pencil size={16} />
                   </button>
                   {canAdmin && (
-                    <button className="icon-button danger" onClick={() => remove(member.id)} title="Delete">
+                    <button className="icon-button danger" onClick={() => remove(member.id)} title="Eliminar">
                       <Trash2 size={16} />
                     </button>
                   )}
@@ -1153,7 +1153,7 @@ function StaffAdminView({
             ))}
             {!visibleStaff.length && (
               <tr>
-                <td colSpan={8}>No staff records yet.</td>
+                <td colSpan={8}>Ainda sem registos de equipa.</td>
               </tr>
             )}
           </tbody>
@@ -1184,8 +1184,8 @@ function DataTable<T extends Record<string, unknown>>({
             {columns.map((column) => (
               <th key={column.key}>{column.label}</th>
             ))}
-            <th>Status</th>
-            <th className="actions-cell">Actions</th>
+            <th>Estado</th>
+            <th className="actions-cell">Ações</th>
           </tr>
         </thead>
         <tbody>
@@ -1194,7 +1194,7 @@ function DataTable<T extends Record<string, unknown>>({
               {columns.map((column) => (
                 <td key={column.key}>{String(row[column.key] ?? "")}</td>
               ))}
-              <td>{row.is_active === false ? "Inactive" : "Active"}</td>
+              <td>{row.is_active === false ? "Inativo" : "Ativo"}</td>
               <td className="actions-cell">
                 {onEdit && (
                   <button className="icon-button" onClick={() => onEdit(row)} title="Edit">
@@ -1202,7 +1202,7 @@ function DataTable<T extends Record<string, unknown>>({
                   </button>
                 )}
                 {onDelete && (
-                  <button className="icon-button danger" onClick={() => onDelete(row)} title="Delete">
+                  <button className="icon-button danger" onClick={() => onDelete(row)} title="Eliminar">
                     <Trash2 size={16} />
                   </button>
                 )}
@@ -1211,7 +1211,7 @@ function DataTable<T extends Record<string, unknown>>({
           ))}
           {!rows.length && (
             <tr>
-              <td colSpan={columns.length + 2}>No records yet.</td>
+              <td colSpan={columns.length + 2}>Ainda sem registos.</td>
             </tr>
           )}
         </tbody>
@@ -1249,15 +1249,15 @@ function Dashboard({ purchaseOrders, references }: { purchaseOrders: PurchaseOrd
     <section className="work-section">
       <FilterBar filters={filters} setFilters={setFilters} references={references} />
       <div className="kpi-grid">
-        <Kpi label="Total PO value" value={money(total)} />
-        <Kpi label="POs created" value={String(filtered.length)} />
-        <Kpi label="Average PO" value={money(average)} />
-        <Kpi label="Validated value" value={money(filtered.filter((po) => po.status === "validated").reduce((sum, po) => sum + po.grand_total, 0))} />
+        <Kpi label="Valor total" value={money(total)} />
+        <Kpi label="Adjudicações criadas" value={String(filtered.length)} />
+        <Kpi label="Média por Adjudicação" value={money(average)} />
+        <Kpi label="Valor validado" value={money(filtered.filter((po) => po.status === "validated").reduce((sum, po) => sum + po.grand_total, 0))} />
       </div>
       <div className="dashboard-grid">
-        <SpendPanel title="Spend by project" rows={groupSpend(filtered, (po) => po.project?.project_name ?? "Unassigned")} />
-        <SpendPanel title="Spend by supplier" rows={groupSpend(filtered, (po) => po.supplier?.supplier_name ?? "Unassigned")} />
-        <SpendPanel title="Spend by cost category" rows={groupLineSpend(filtered)} />
+        <SpendPanel title="Custo por obra" rows={groupSpend(filtered, (po) => po.project?.project_name ?? "Unassigned")} />
+        <SpendPanel title="Custo por fornecedor" rows={groupSpend(filtered, (po) => po.supplier?.supplier_name ?? "Unassigned")} />
+        <SpendPanel title="Custo por categoria" rows={groupLineSpend(filtered)} />
         <RecentOrders purchaseOrders={filtered.slice(0, 8)} />
       </div>
     </section>
@@ -1286,7 +1286,7 @@ function FilterBar({
       <label>
         Project
         <select value={filters.projectId} onChange={(event) => setFilters({ ...filters, projectId: event.target.value })}>
-          <option value="">All projects</option>
+          <option value="">Todas as obras</option>
           {references.projects.map((project) => (
             <option value={project.id} key={project.id}>
               {project.project_name}
@@ -1297,7 +1297,7 @@ function FilterBar({
       <label>
         Supplier
         <select value={filters.supplierId} onChange={(event) => setFilters({ ...filters, supplierId: event.target.value })}>
-          <option value="">All suppliers</option>
+          <option value="">Todos os fornecedores</option>
           {references.suppliers.map((supplier) => (
             <option value={supplier.id} key={supplier.id}>
               {supplier.supplier_name}
@@ -1308,7 +1308,7 @@ function FilterBar({
       <label>
         Status
         <select value={filters.status} onChange={(event) => setFilters({ ...filters, status: event.target.value })}>
-          <option value="">All statuses</option>
+          <option value="">Todos os estados</option>
           {statuses.map((status) => (
             <option value={status} key={status}>
               {status}
@@ -1376,7 +1376,7 @@ function SpendPanel({ title, rows }: { title: string; rows: { label: string; val
             <strong>{money(row.value)}</strong>
           </div>
         ))}
-        {!rows.length && <p className="muted">No purchase orders match the current filters.</p>}
+        {!rows.length && <p className="muted">Nenhuma adjudicação corresponde aos filtros.</p>}
       </div>
     </div>
   );
@@ -1385,15 +1385,15 @@ function SpendPanel({ title, rows }: { title: string; rows: { label: string; val
 function RecentOrders({ purchaseOrders }: { purchaseOrders: PurchaseOrder[] }) {
   return (
     <div className="panel">
-      <h3>Recent POs</h3>
+      <h3>Adjudicações recentes</h3>
       <div className="compact-list">
         {purchaseOrders.map((po) => (
           <div key={po.id}>
             <strong>{po.po_number}</strong>
-            <span>{po.supplier?.supplier_name ?? "Supplier"} · {money(po.grand_total)}</span>
+            <span>{po.supplier?.supplier_name ?? "Fornecedor"} · {money(po.grand_total)}</span>
           </div>
         ))}
-        {!purchaseOrders.length && <p className="muted">No recent purchase orders.</p>}
+        {!purchaseOrders.length && <p className="muted">Sem adjudicações recentes.</p>}
       </div>
     </div>
   );
@@ -1438,7 +1438,7 @@ function PurchaseOrders({
         <label>
           Project
           <select value={projectFilter} onChange={(event) => setProjectFilter(event.target.value)}>
-            <option value="">All projects</option>
+            <option value="">Todas as obras</option>
             {references.projects.map((project) => (
               <option value={project.id} key={project.id}>
                 {project.project_name}
@@ -1449,7 +1449,7 @@ function PurchaseOrders({
         <label>
           Created by
           <select value={requesterFilter} onChange={(event) => setRequesterFilter(event.target.value)}>
-            <option value="">All users</option>
+            <option value="">Todos os utilizadores</option>
             {references.staff.map((member) => (
               <option value={member.id} key={member.id}>
                 {member.initials ? `${member.initials} - ${member.full_name}` : member.full_name}
@@ -1462,14 +1462,14 @@ function PurchaseOrders({
         <table>
           <thead>
             <tr>
-              <th>PO number</th>
-              <th>Date</th>
-              <th>Initials</th>
-              <th>Project</th>
-              <th>Supplier</th>
-              <th>Status</th>
+              <th>Nº Adjudicação</th>
+              <th>Data</th>
+              <th>Iniciais</th>
+              <th>Obra</th>
+              <th>Fornecedor</th>
+              <th>Estado</th>
               <th>Total</th>
-              <th className="actions-cell">Actions</th>
+              <th className="actions-cell">Ações</th>
             </tr>
           </thead>
           <tbody>
@@ -1490,16 +1490,16 @@ function PurchaseOrders({
                     <button className="icon-button" onClick={() => onPreview(po)} title="Preview">
                       <Eye size={16} />
                     </button>
-                    <button className="icon-button" disabled={!canWrite || po.status !== "draft"} onClick={() => onEdit(po)} title="Edit draft">
+                    <button className="icon-button" disabled={!canWrite || po.status !== "draft"} onClick={() => onEdit(po)} title="Editar rascunho">
                       <Pencil size={16} />
                     </button>
                     <button className="icon-button" disabled={!canWrite || po.status !== "draft"} onClick={() => onValidate(po)} title="Validate PO">
                       <ArrowRight size={16} />
                     </button>
-                    <button className="icon-button" disabled={!canWrite} onClick={() => onCopy(po)} title="Copy to new draft">
+                    <button className="icon-button" disabled={!canWrite} onClick={() => onCopy(po)} title="Copiar para novo rascunho">
                       <Copy size={16} />
                     </button>
-                    <button className="icon-button danger" disabled={!canDeleteDraft} onClick={() => onDelete(po)} title={canDeleteDraft ? "Delete draft" : "Only the creator can delete a draft PO"}>
+                    <button className="icon-button danger" disabled={!canDeleteDraft} onClick={() => onDelete(po)} title={canDeleteDraft ? "Eliminar rascunho" : "Só quem criou pode eliminar um rascunho de Adjudicação"}>
                       <Trash2 size={16} />
                     </button>
                   </td>
@@ -1509,7 +1509,7 @@ function PurchaseOrders({
             {!filteredPurchaseOrders.length && (
               <tr>
                 <td colSpan={8}>
-                  {purchaseOrders.length ? "No purchase orders match the selected filters." : "No purchase orders yet."}
+                  {purchaseOrders.length ? "Nenhuma adjudicação corresponde aos filtros." : "Ainda sem adjudicações."}
                 </td>
               </tr>
             )}
@@ -1537,7 +1537,7 @@ function formatProjectSiteContact(project?: Project | null) {
 }
 
 const DEFAULT_VEHICLE_REQUIREMENTS = "Vehicle to have accreditation FORS Silver as a minimum.";
-const DEFAULT_OFFLOADING_INSTRUCTIONS = "By hand during site delivery hours.";
+const DEFAULT_OFFLOADING_INSTRUCTIONS = "À mão, durante o horário de entregas na obra.";
 const DEFAULT_DELIVERY_INSTRUCTIONS =
   "Please call site contact 30 minutes prior to arrival. All drivers must be aware of the site and delivery rules as per the Driver's Leaflet.";
 
@@ -1545,9 +1545,9 @@ const PAYMENT_TERMS_OPTIONS = ["Pronto pagamento", "Fatura a 30 dias", "Fatura a
 const DELIVERY_TIME_OPTIONS = [
   "",
   "TBC",
-  "Any time",
-  "Morning",
-  "Afternoon",
+  "Qualquer hora",
+  "Manhã",
+  "Tarde",
   "Before 10:00",
   "10:00 - 12:00",
   "12:00 - 14:00",
@@ -1601,7 +1601,7 @@ function POForm({
   const [supplierId, setSupplierId] = useState(editingPurchaseOrder?.supplier_id ?? activeSuppliers[0]?.id ?? "");
   const [projectId, setProjectId] = useState(editingPurchaseOrder?.project_id ?? activeProjects[0]?.id ?? "");
   const requesterId = editingPurchaseOrder?.requester_id ?? currentStaff?.id ?? "";
-  const requesterName = editingPurchaseOrder?.requester?.full_name ?? currentStaff?.full_name ?? "No matching staff record";
+  const requesterName = editingPurchaseOrder?.requester?.full_name ?? currentStaff?.full_name ?? "Sem registo de equipa correspondente";
   const requesterInitials =
     editingPurchaseOrder?.requester?.initials ||
     currentStaff?.initials ||
@@ -1677,7 +1677,7 @@ function POForm({
     event.preventDefault();
     setError(null);
     if (!supplier || !project) {
-      setError("Select a supplier and project before creating a purchase order.");
+      setError("Selecione fornecedor e obra antes de criar uma adjudicação.");
       return;
     }
     if (!requesterId) {
@@ -1686,11 +1686,11 @@ function POForm({
     }
     const cleanLines = lines.filter((line) => line.description.trim());
     if (!cleanLines.length) {
-      setError("Add at least one line item description.");
+      setError("Adicione pelo menos a descrição de uma linha.");
       return;
     }
     if (cleanLines.some((line) => !line.category_id)) {
-      setError("Select a cost category for each line item.");
+      setError("Selecione uma categoria de custo para cada linha.");
       return;
     }
 
@@ -1735,7 +1735,7 @@ function POForm({
       }
       if (savedPurchaseOrderId) await onSaved(savedPurchaseOrderId);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to save purchase order.");
+      setError(err instanceof Error ? err.message : "Não foi possível guardar a adjudicação.");
     } finally {
       setBusy(false);
     }
@@ -1754,7 +1754,7 @@ function POForm({
           <label>
             Supplier
             <select value={supplierId} onChange={(event) => setSupplierId(event.target.value)} required>
-              <option value="">Select supplier</option>
+              <option value="">Selecionar fornecedor</option>
               {activeSuppliers.map((item) => (
                 <option value={item.id} key={item.id}>
                   {item.supplier_name}
@@ -1765,7 +1765,7 @@ function POForm({
           <label>
             Project / Site
             <select value={projectId} onChange={(event) => changeProject(event.target.value)} required>
-              <option value="">Select project</option>
+              <option value="">Selecionar obra</option>
               {activeProjects.map((item) => (
                 <option value={item.id} key={item.id}>
                   {item.project_name}
@@ -1777,7 +1777,7 @@ function POForm({
             Requester
             <div className="readonly-field">
               <strong>{requesterName}</strong>
-              <span>{requesterInitials || "Initials missing"}</span>
+              <span>{requesterInitials || "Faltam iniciais"}</span>
             </div>
           </label>
           <label>
@@ -1819,7 +1819,7 @@ function POForm({
           <label>
             Delivery time
             <select value={form.delivery_time} onChange={(event) => setForm({ ...form, delivery_time: event.target.value })}>
-              <option value="">Select time</option>
+              <option value="">Selecionar hora</option>
               {DELIVERY_TIME_OPTIONS.filter(Boolean).map((option) => (
                 <option value={option} key={option}>
                   {option}
@@ -1834,28 +1834,28 @@ function POForm({
         </div>
 
         <div className="supplier-snapshot">
-          <strong>Supplier contact</strong>
-          <span>{supplier?.contact_name || "No contact name"}</span>
-          <span>{supplier?.email || "No email"}</span>
-          <span>{supplier?.phone || "No phone"}</span>
+          <strong>Contacto do fornecedor</strong>
+          <span>{supplier?.contact_name || "Sem nome de contacto"}</span>
+          <span>{supplier?.email || "Sem email"}</span>
+          <span>{supplier?.phone || "Sem telefone"}</span>
         </div>
 
         <div className="line-editor">
           <div className="section-heading compact-heading">
-            <h2>Line items</h2>
+            <h2>Linhas</h2>
             <button type="button" onClick={() => setLines([...lines, { sort_order: lines.length + 1, item_ref: "", description: "", quantity: 1, unit: "each", rate: 0, discount_pct: 0, vat_rate: 23, category_id: "", expense_type: "" }])}>
               <Plus size={16} />
               Add line
             </button>
           </div>
           <div className="line-header" aria-hidden="true">
-            <span>Item ref</span>
-            <span>Description</span>
-            <span>Category</span>
-            <span>Subcategory</span>
-            <span>Unit numbers</span>
-            <span>Unit</span>
-            <span>Unit price</span>
+            <span>Ref. artigo</span>
+            <span>Descrição</span>
+            <span>Categoria</span>
+            <span>Subcategoria</span>
+            <span>Nº de unidades</span>
+            <span>Unidade</span>
+            <span>Preço unitário</span>
             <span>Desc. %</span>
             <span>VAT</span>
             <span>Total</span>
@@ -1870,10 +1870,10 @@ function POForm({
 
             return (
               <div className="line-row" key={index}>
-                <input placeholder="Item ref" value={line.item_ref ?? ""} onChange={(event) => updateLine(index, { item_ref: event.target.value })} />
-                <input placeholder="Description" value={line.description} onChange={(event) => updateLine(index, { description: event.target.value })} />
+                <input placeholder="Ref. artigo" value={line.item_ref ?? ""} onChange={(event) => updateLine(index, { item_ref: event.target.value })} />
+                <input placeholder="Descrição" value={line.description} onChange={(event) => updateLine(index, { description: event.target.value })} />
                 <select value={selectedExpenseType} onChange={(event) => updateLine(index, { expense_type: event.target.value, category_id: "" })}>
-                  <option value="">Category</option>
+                  <option value="">Categoria</option>
                   {expenseTypes.map((expenseType) => (
                     <option value={expenseType} key={expenseType}>
                       {expenseType}
@@ -1888,7 +1888,7 @@ function POForm({
                     updateLine(index, { category_id: event.target.value, expense_type: nextCategory?.expense_type ?? selectedExpenseType });
                   }}
                 >
-                  <option value="">Subcategory</option>
+                  <option value="">Subcategoria</option>
                   {subcategories.map((category) => (
                     <option value={category.id} key={category.id}>
                       {category.category_code ? `${category.category_name} (${category.category_code})` : category.category_name}
@@ -1906,7 +1906,7 @@ function POForm({
                   <option value={0}>Isento</option>
                 </select>
                 <strong>{money(line.quantity * line.rate * (1 - (line.discount_pct ?? 0) / 100))}</strong>
-                <button type="button" className="icon-button danger" onClick={() => setLines(lines.filter((_, lineIndex) => lineIndex !== index))} title="Remove line">
+                <button type="button" className="icon-button danger" onClick={() => setLines(lines.filter((_, lineIndex) => lineIndex !== index))} title="Remover linha">
                   <Trash2 size={16} />
                 </button>
               </div>
@@ -1923,8 +1923,8 @@ function POForm({
                 onChange={(event) => setForm({ ...form, include_driver_leaflet: event.target.checked })}
               />
               <span>
-                <strong>Driver leaflet</strong>
-                <small>Include the driver leaflet after the purchase order.</small>
+                <strong>Folheto do motorista</strong>
+                <small>Incluir o folheto do motorista após a adjudicação.</small>
               </span>
             </label>
             <label className="tick-box">
@@ -1934,8 +1934,8 @@ function POForm({
                 onChange={(event) => setForm({ ...form, include_terms_conditions: event.target.checked })}
               />
               <span>
-                <strong>Terms & Conditions</strong>
-                <small>Include Legendre conditions after the driver leaflet.</small>
+                <strong>Termos e Condições</strong>
+                <small>Incluir condições Legendre após o folheto do motorista.</small>
               </span>
             </label>
           </div>
@@ -1969,7 +1969,7 @@ function POForm({
         <div className="button-row">
           <button type="submit" disabled={busy}>
             <Save size={16} />
-            {editingPurchaseOrder ? "Save PO changes" : "Create draft PO"}
+            {editingPurchaseOrder ? "Guardar alterações" : "Criar rascunho de Adjudicação"}
           </button>
           {editingPurchaseOrder && (
             <button type="button" className="secondary" onClick={onDone}>
@@ -2046,52 +2046,52 @@ function PurchaseOrderPreview({ po, company }: { po: PurchaseOrder; company: Rec
             <span>{company.email ?? ""}</span>
           </div>
         </header>
-        <h2 className="po-title">Purchase Order</h2>
+        <h2 className="po-title">Adjudicação</h2>
         <section className="po-meta-grid">
           <div className="po-number-cell">
-            <span>Number</span>
+            <span>Número</span>
             <strong>{po.po_number}</strong>
           </div>
           <div>
-            <span>Date</span>
+            <span>Data</span>
             <strong>{shortDate(po.po_date)}</strong>
           </div>
           <div>
-            <span>Status</span>
+            <span>Estado</span>
             <strong>{po.status}</strong>
           </div>
           <div>
-            <span>Delivery date</span>
+            <span>Data de entrega</span>
             <strong>{shortDate(po.delivery_date)}</strong>
             {po.delivery_time && <em>{po.delivery_time}</em>}
           </div>
         </section>
         <section className="po-info-grid">
           <div>
-            <h3>Supplier info</h3>
+            <h3>Dados do fornecedor</h3>
             <dl>
-              <dt>Name</dt>
+              <dt>Nome</dt>
               <dd>{po.supplier?.supplier_name}</dd>
-              <dt>Sales contact</dt>
+              <dt>Contacto comercial</dt>
               <dd>{po.supplier_contact_name}</dd>
-              <dt>Phone</dt>
+              <dt>Telefone</dt>
               <dd>{po.supplier_phone}</dd>
               <dt>Email</dt>
               <dd>{po.supplier_email}</dd>
-              <dt>Address</dt>
+              <dt>Morada</dt>
               <dd>{po.supplier_address}</dd>
             </dl>
           </div>
           <div>
-            <h3>Project / site</h3>
+            <h3>Obra / local</h3>
             <dl>
-              <dt>Project</dt>
+              <dt>Obra</dt>
               <dd>{po.project?.project_name}</dd>
-              <dt>Cost centre</dt>
+              <dt>Centro de custo</dt>
               <dd>{po.project?.cost_centre_code}</dd>
-              <dt>Site contact</dt>
+              <dt>Contacto na obra</dt>
               <dd>{po.site_contact}</dd>
-              <dt>Address</dt>
+              <dt>Morada</dt>
               <dd>{po.delivery_address}</dd>
             </dl>
           </div>
@@ -2108,11 +2108,11 @@ function PurchaseOrderPreview({ po, company }: { po: PurchaseOrder; company: Rec
           </colgroup>
           <thead>
             <tr>
-              <th>Item ref</th>
-              <th>Description</th>
-              <th>Quantity</th>
-              <th>Unit</th>
-              <th>Unit price</th>
+              <th>Ref. artigo</th>
+              <th>Descrição</th>
+              <th>Quantidade</th>
+              <th>Unidade</th>
+              <th>Preço unitário</th>
               <th>VAT</th>
               <th>Total</th>
             </tr>
@@ -2133,7 +2133,7 @@ function PurchaseOrderPreview({ po, company }: { po: PurchaseOrder; company: Rec
         </table>
         <section className="po-bottom-grid">
           <div>
-            <h3>Delivery instructions</h3>
+            <h3>Instruções de entrega</h3>
             <p>{po.delivery_instructions}</p>
             <p>{po.vehicle_requirements}</p>
             <p>{po.offloading_instructions}</p>
@@ -2144,7 +2144,7 @@ function PurchaseOrderPreview({ po, company }: { po: PurchaseOrder; company: Rec
               <strong>{money(po.subtotal)}</strong>
             </div>
             <div>
-              <span>VAT applicable</span>
+              <span>IVA aplicável</span>
               <strong>{money(po.vat_total)}</strong>
             </div>
             <div>
@@ -2155,7 +2155,7 @@ function PurchaseOrderPreview({ po, company }: { po: PurchaseOrder; company: Rec
         </section>
         {po.notes && (
           <section className="po-notes-block">
-            <h3>Order notes</h3>
+            <h3>Notas da adjudicação</h3>
             <p>{po.notes}</p>
           </section>
         )}
@@ -2197,7 +2197,7 @@ const driverRules = [
   "No smoking or e-smoking is permitted at any time on site unless in designated areas.",
   "No drugs or alcohol are to be consumed during work hours. Drivers will not be permitted on site if under the influence of alcohol, drugs, or medication.",
   "All accidents, incidents, near misses, and unsafe acts or conditions are to be reported to Legendre UK immediately.",
-  "All Health and Safety signs on site must be adhered to.",
+  "Toda a sinalização de Segurança e Saúde na obra deve ser respeitada.",
   "Drivers have the right to refuse a task where there is a health and safety risk that is not adequately controlled.",
   "Beware of pedestrians and other road users when leaving the site.",
   "All drivers must be in possession of a valid driving licence and suitable driver training.",
@@ -2217,12 +2217,12 @@ const driverRules = [
 function Exports({ references, purchaseOrders }: { references: ReferenceData; purchaseOrders: PurchaseOrder[] }) {
   const exports = [
     {
-      label: "Supplier list",
+      label: "Lista de fornecedores",
       filename: "legendre-suppliers.csv",
       action: () =>
         downloadCsv(
           "legendre-suppliers.csv",
-          ["Name", "Account code", "Contact", "Email", "Phone", "Address", "VAT number", "Active"],
+          ["Name", "Código de conta", "Contacto", "Email", "Phone", "Morada", "NIF", "Ativo"],
           references.suppliers.map((row) => [
             row.supplier_name,
             row.account_code,
@@ -2236,12 +2236,12 @@ function Exports({ references, purchaseOrders }: { references: ReferenceData; pu
         ),
     },
     {
-      label: "Project/site list",
+      label: "Lista de obras",
       filename: "legendre-projects.csv",
       action: () =>
         downloadCsv(
           "legendre-projects.csv",
-          ["Name", "Code", "Site address", "Cost centre", "Default delivery", "Site contact", "Site contact phone", "Active"],
+          ["Name", "Code", "Site address", "Centro de custo", "Entrega (por defeito)", "Site contact", "Site contact phone", "Ativo"],
           references.projects.map((row) => [
             row.project_name,
             row.project_code,
@@ -2255,22 +2255,22 @@ function Exports({ references, purchaseOrders }: { references: ReferenceData; pu
         ),
     },
     {
-      label: "Staff list",
+      label: "Lista da equipa",
       filename: "legendre-staff.csv",
       action: () =>
         downloadCsv(
           "legendre-staff.csv",
-          ["Full name", "Initials", "Email", "Phone", "Role", "Active"],
+          ["Nome completo", "Iniciais", "Email", "Phone", "Role", "Ativo"],
           references.staff.map((row) => [row.full_name, row.initials, row.email, row.phone, row.role, row.is_active]),
         ),
     },
     {
-      label: "Purchase order history",
+      label: "Histórico de adjudicações",
       filename: "legendre-purchase-orders.csv",
       action: () =>
         downloadCsv(
           "legendre-purchase-orders.csv",
-          ["PO number", "Date", "Delivery date", "Delivery time", "Status", "Project", "Supplier", "Subtotal", "VAT", "Total"],
+          ["Nº Adjudicação", "Date", "Data de entrega", "Hora de entrega", "Estado", "Obra", "Fornecedor", "Subtotal", "VAT", "Total"],
           purchaseOrders.map((po) => [
             po.po_number,
             po.po_date,
@@ -2286,12 +2286,12 @@ function Exports({ references, purchaseOrders }: { references: ReferenceData; pu
         ),
     },
     {
-      label: "PO line item history",
+      label: "Histórico de linhas da Adjudicação",
       filename: "legendre-po-line-items.csv",
       action: () =>
         downloadCsv(
           "legendre-po-line-items.csv",
-          ["PO number", "Project", "Supplier", "Item ref", "Description", "Category", "Quantity", "Unit", "Rate", "VAT rate", "Line total"],
+          ["Nº Adjudicação", "Obra", "Fornecedor", "Ref. artigo", "Descrição", "Categoria", "Quantidade", "Unit", "Rate", "VAT rate", "Total da linha"],
           purchaseOrders.flatMap((po) =>
             (po.line_items ?? []).map((line) => [
               po.po_number,
