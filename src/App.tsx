@@ -48,6 +48,7 @@ import {
 import { downloadCsv } from "./lib/csv";
 import { hasSupabaseConfig, supabase } from "./lib/supabase";
 import { isoToday, money, shortDate } from "./lib/format";
+import { DeliveryReconciliation } from "./DeliveryReconciliation";
 import legendreLogo from "./assets/legendre-logo.png";
 import termsConditionsPage1 from "./assets/terms-conditions-1.png";
 import termsConditionsPage2 from "./assets/terms-conditions-2.png";
@@ -267,7 +268,7 @@ function ProcurementShell({ session }: { session: Session }) {
   }, []);
 
   const navItems: NavItem[] = [
-    { key: "dashboard", label: "Painel", icon: BarChart3 },
+    { key: "dashboard", label: "Dashboard", icon: BarChart3 },
     { key: "purchase-orders", label: "Adjudicações", icon: ClipboardList },
     { key: "new-po", label: "Nova Adjudicação", icon: FilePlus2, disabled: !canWritePo },
     { key: "suppliers", label: "Fornecedores", icon: Package, disabled: !canManageSuppliers },
@@ -437,6 +438,7 @@ function ProcurementShell({ session }: { session: Session }) {
             po={previewPurchaseOrder}
             settings={references.settings}
             onClose={() => setPreviewPurchaseOrder(null)}
+            canWrite={canWritePo}
           />
         )}
       </main>
@@ -1989,7 +1991,7 @@ function POForm({
   );
 }
 
-function PreviewModal({ po, settings, onClose }: { po: PurchaseOrder; settings: AppSetting[]; onClose: () => void }) {
+function PreviewModal({ po, settings, onClose, canWrite }: { po: PurchaseOrder; settings: AppSetting[]; onClose: () => void; canWrite: boolean }) {
   const company = (settings.find((setting) => setting.setting_key === "company")?.setting_value ?? {}) as Record<string, string>;
 
   function printPurchaseOrder() {
@@ -2013,14 +2015,17 @@ function PreviewModal({ po, settings, onClose }: { po: PurchaseOrder; settings: 
         <div className="modal-actions">
           <button onClick={printPurchaseOrder}>
             <Printer size={16} />
-            Print / Save PDF
+            Imprimir / Guardar PDF
           </button>
           <button className="secondary" onClick={onClose}>
             <X size={16} />
-            Close
+            Fechar
           </button>
         </div>
         <PurchaseOrderPreview po={po} company={company} />
+        <div className="recon-wrap no-print">
+          <DeliveryReconciliation purchaseOrder={po} canWrite={canWrite} />
+        </div>
       </div>
     </div>
   );
