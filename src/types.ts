@@ -127,6 +127,74 @@ export type PurchaseOrder = {
   line_items?: PurchaseOrderLineItem[];
 };
 
+export type DeliveryNoteLine = {
+  id: string;
+  delivery_note_id: string;
+  line_item_id: string;
+  quantity_received: number;
+};
+
+export type DeliveryNote = {
+  id: string;
+  purchase_order_id: string;
+  guia_number: string | null;
+  delivery_date: string;
+  attachment_url: string | null;
+  notes: string | null;
+  created_at?: string;
+  lines?: DeliveryNoteLine[];
+};
+
+export type SupplierInvoiceLine = {
+  id: string;
+  invoice_id: string;
+  line_item_id: string;
+  quantity_invoiced: number;
+  unit_price_invoiced: number;
+};
+
+export type SupplierInvoice = {
+  id: string;
+  purchase_order_id: string;
+  invoice_number: string | null;
+  invoice_date: string;
+  attachment_url: string | null;
+  notes: string | null;
+  created_at?: string;
+  lines?: SupplierInvoiceLine[];
+};
+
+export type LineReconciliation = {
+  line_item_id: string;
+  purchase_order_id: string;
+  project_id: string;
+  po_number: string;
+  po_date: string;
+  description: string;
+  category_id: string | null;
+  qty_ordered: number;
+  po_price: number;
+  qty_received: number;
+  qty_invoiced: number;
+  value_received: number;
+  value_invoiced: number;
+  accrual_value: number;
+  qty_outstanding: number;
+  avg_price_invoiced: number | null;
+  price_divergence: boolean;
+};
+
+export type AccrualByProjectMonth = {
+  project_id: string;
+  project_name: string;
+  month: string;
+  category_id: string | null;
+  expense_type: string | null;
+  category_name: string | null;
+  category_code: string | null;
+  value_received: number;
+};
+
 export type ReferenceData = {
   suppliers: Supplier[];
   projects: Project[];
