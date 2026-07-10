@@ -398,7 +398,7 @@ export async function loadAccrualsByProjectMonth() {
 
 export async function createDeliveryNote(
   purchaseOrderId: string,
-  header: { guia_number: string | null; delivery_date: string; notes: string | null },
+  header: { guia_number: string | null; delivery_date: string; notes: string | null; attachment_url?: string | null },
   lines: { line_item_id: string; quantity_received: number }[],
 ) {
   const client = requireClient();
@@ -421,7 +421,7 @@ export async function createDeliveryNote(
 
 export async function createSupplierInvoice(
   purchaseOrderId: string,
-  header: { invoice_number: string | null; invoice_date: string; notes: string | null },
+  header: { invoice_number: string | null; invoice_date: string; notes: string | null; attachment_url?: string | null },
   lines: { line_item_id: string; quantity_invoiced: number; unit_price_invoiced: number }[],
 ) {
   const client = requireClient();
@@ -456,5 +456,51 @@ export async function deleteDeliveryNote(id: string) {
 export async function deleteSupplierInvoice(id: string) {
   const client = requireClient();
   const { error } = await client.from("supplier_invoices").delete().eq("id", id);
+  if (error) throw error;
+}
+
+// ─────────────────────────────────────────────
+// LOTE 3E — Anexos (Supabase Storage, bucket privado 'anexos')
+// ─────────────────────────────────────────────
+
+const ANEXOS_BUCKET = "anexos";
+const ANEXO_MAX_BYTES = 10 * 1024 * 1024; // 10 MB
+const ANEXO_TIPOS_OK = ["application/pdf", "image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"];
+
+// Faz upload de um anexo e devolve o caminho (path) guardado em attachment_url.
+export async function uploadAnexo(file: File, prefixo: string): Promise<string> {
+  const client = requireClient();
+  if (file.size > ANEXO_MAX_BYTES) {
+    throw new Error("O ficheiro é demasiado grande (máx. 10 MB).");
+  }
+  if (file.type && !ANEXO_TIPOS_OK.includes(file.type)) {
+    throw new Error("Tipo de ficheiro não suportado. Use PDF ou imagem.");
+  }
+  const ext = file.name.includes(".") ? file.name.split(".").pop() : "bin";
+  const safe = `${prefixo}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+  const { error } = await client.storage.from(ANEXOS_BUCKET).upload(safe, file, {
+    cacheControl: "3600",
+    upsert: false,
+  });
+  if (error) throw error;
+  return safe;
+}
+
+// Gera um link temporário (assinado) para abrir/descarregar um anexo privado.
+export async function getAnexoUrl(path: string): Promise<string | null> {
+  if (!path) return null;
+  const client = requireClient();
+  const { data, error } = await client.storage
+    .from(ANEXOS_BUCKET)
+    .createSignedUrl(path, 60 * 10); // válido 10 minutos
+  if (error) throw error;
+  return data?.signedUrl ?? null;
+}
+
+// Remove um anexo do storage.
+export async function deleteAnexo(path: string): Promise<void> {
+  if (!path) return;
+  const client = requireClient();
+  const { error } = await client.storage.from(ANEXOS_BUCKET).remove([path]);
   if (error) throw error;
 }
