@@ -189,7 +189,8 @@ export async function deletePurchaseOrder(id: string, requesterId: string) {
 
 export async function validatePurchaseOrder(id: string) {
   const client = requireClient();
-  const { error } = await client.from("purchase_orders").update({ status: "validated" }).eq("id", id).eq("status", "draft");
+  // chama a função que impõe o limite de autoridade na base de dados
+  const { error } = await client.rpc("validate_purchase_order", { po_id: id });
   if (error) throw error;
 }
 
