@@ -42,6 +42,7 @@ export type StaffMember = {
   phone: string | null;
   role: AppRole;
   is_active: boolean;
+  authority_limit: number | null;
   created_at?: string;
   updated_at?: string;
 };
@@ -193,6 +194,8 @@ export type AccrualByProjectMonth = {
   category_name: string | null;
   category_code: string | null;
   value_received: number;
+  value_invoiced: number;
+  accrual_value: number;
 };
 
 export type ReferenceData = {
