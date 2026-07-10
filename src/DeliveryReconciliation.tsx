@@ -7,6 +7,8 @@ import {
   createSupplierInvoice,
   deleteDeliveryNote,
   deleteSupplierInvoice,
+  uploadAnexo,
+  getAnexoUrl,
 } from "./lib/data";
 import { money, shortDate, isoToday } from "./lib/format";
 import type {
@@ -159,6 +161,8 @@ export function DeliveryReconciliation({ purchaseOrder, canWrite }: Props) {
                 {notes.map((n) => (
                   <li key={n.id}>
                     <span><strong>{n.guia_number || "(sem nº)"}</strong> · {shortDate(n.delivery_date)} · {(n.lines ?? []).length} linha(s)</span>
+                    <span className="doc-actions">
+                    {n.attachment_url && <AnexoLink path={n.attachment_url} />}
                     {canWrite && (
                       <button className="link-button danger" onClick={async () => {
                         if (window.confirm("Eliminar esta guia?")) {
@@ -167,6 +171,7 @@ export function DeliveryReconciliation({ purchaseOrder, canWrite }: Props) {
                         }
                       }}>Eliminar</button>
                     )}
+                    </span>
                   </li>
                 ))}
               </ul>
@@ -183,6 +188,8 @@ export function DeliveryReconciliation({ purchaseOrder, canWrite }: Props) {
                 {invoices.map((i) => (
                   <li key={i.id}>
                     <span><strong>{i.invoice_number || "(sem nº)"}</strong> · {shortDate(i.invoice_date)} · {(i.lines ?? []).length} linha(s)</span>
+                    <span className="doc-actions">
+                    {i.attachment_url && <AnexoLink path={i.attachment_url} />}
                     {canWrite && (
                       <button className="link-button danger" onClick={async () => {
                         if (window.confirm("Eliminar esta fatura?")) {
@@ -191,6 +198,7 @@ export function DeliveryReconciliation({ purchaseOrder, canWrite }: Props) {
                         }
                       }}>Eliminar</button>
                     )}
+                    </span>
                   </li>
                 ))}
               </ul>
@@ -199,6 +207,27 @@ export function DeliveryReconciliation({ purchaseOrder, canWrite }: Props) {
         </>
       )}
     </section>
+  );
+}
+
+// Link que gera um URL temporário (assinado) para abrir um anexo privado
+function AnexoLink({ path }: { path: string }) {
+  const [loading, setLoading] = useState(false);
+  async function open() {
+    setLoading(true);
+    try {
+      const url = await getAnexoUrl(path);
+      if (url) window.open(url, "_blank", "noopener");
+    } catch {
+      // silencioso
+    } finally {
+      setLoading(false);
+    }
+  }
+  return (
+    <button className="link-button" onClick={open} disabled={loading}>
+      {loading ? "A abrir…" : "Ver anexo"}
+    </button>
   );
 }
 
@@ -220,6 +249,7 @@ function DeliveryNoteForm({
   const [guiaNumber, setGuiaNumber] = useState("");
   const [date, setDate] = useState(isoToday());
   const [qty, setQty] = useState<Record<string, number>>({});
+  const [file, setFile] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -239,10 +269,15 @@ function DeliveryNoteForm({
         setSaving(false);
         return;
       }
+      let attachment_url: string | null = null;
+      if (file) {
+        attachment_url = await uploadAnexo(file, `guias/${purchaseOrderId}`);
+      }
       await createDeliveryNote(purchaseOrderId, {
         guia_number: guiaNumber || null,
         delivery_date: date,
         notes: null,
+        attachment_url,
       }, lines);
       onSaved();
     } catch (e: any) {
@@ -257,6 +292,7 @@ function DeliveryNoteForm({
       <div className="form-grid">
         <label>Nº da guia<input value={guiaNumber} onChange={(e) => setGuiaNumber(e.target.value)} placeholder="ex: G-001" /></label>
         <label>Data de entrega<input type="date" value={date} onChange={(e) => setDate(e.target.value)} /></label>
+        <label>Anexo (PDF/foto)<input type="file" accept="application/pdf,image/*" onChange={(e) => setFile(e.target.files?.[0] ?? null)} /></label>
       </div>
       <div className="button-row">
         <button className="secondary" type="button" onClick={fillAll}>Recebi tudo</button>
@@ -308,6 +344,7 @@ function InvoiceForm({
     items.forEach((li) => { init[li.id] = Number(li.rate); }); // pré-preenche com o preço da ADJ
     return init;
   });
+  const [file, setFile] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -324,10 +361,15 @@ function InvoiceForm({
         setSaving(false);
         return;
       }
+      let attachment_url: string | null = null;
+      if (file) {
+        attachment_url = await uploadAnexo(file, `faturas/${purchaseOrderId}`);
+      }
       await createSupplierInvoice(purchaseOrderId, {
         invoice_number: invNumber || null,
         invoice_date: date,
         notes: null,
+        attachment_url,
       }, lines);
       onSaved();
     } catch (e: any) {
@@ -342,6 +384,7 @@ function InvoiceForm({
       <div className="form-grid">
         <label>Nº da fatura<input value={invNumber} onChange={(e) => setInvNumber(e.target.value)} placeholder="ex: FT-500" /></label>
         <label>Data da fatura<input type="date" value={date} onChange={(e) => setDate(e.target.value)} /></label>
+        <label>Anexo (PDF/foto)<input type="file" accept="application/pdf,image/*" onChange={(e) => setFile(e.target.files?.[0] ?? null)} /></label>
       </div>
       <table className="recon-table">
         <thead><tr><th>Artigo</th><th className="num">Preço ADJ</th><th className="num">Qtd faturada</th><th className="num">Preço faturado</th></tr></thead>
