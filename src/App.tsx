@@ -24,6 +24,7 @@ import {
   Trash2,
   Users,
   X,
+  TrendingUp,
 } from "lucide-react";
 import {
   createPurchaseOrder,
@@ -49,6 +50,7 @@ import { downloadCsv } from "./lib/csv";
 import { hasSupabaseConfig, supabase } from "./lib/supabase";
 import { isoToday, money, shortDate } from "./lib/format";
 import { DeliveryReconciliation } from "./DeliveryReconciliation";
+import { AccrualsView } from "./AccrualsView";
 import legendreLogo from "./assets/legendre-logo.png";
 import type {
   AppRole,
@@ -67,6 +69,7 @@ import type {
 type ViewKey =
   | "dashboard"
   | "purchase-orders"
+  | "accruals"
   | "new-po"
   | "suppliers"
   | "projects"
@@ -177,7 +180,18 @@ function ProcurementShell({ session }: { session: Session }) {
 
   async function handleValidatePurchaseOrder(po: PurchaseOrder) {
     if (po.status !== "draft") return;
-    const confirmed = window.confirm(`Validate purchase order ${po.po_number}? This will lock it from further editing.`);
+
+    // Aviso prévio no ecrã (a base de dados impõe na mesma o limite)
+    const meuLimite = currentStaff?.authority_limit ?? null;
+    const souAdmin = normalizeRole(currentStaff?.role ?? "viewer") === "admin";
+    if (!souAdmin && meuLimite !== null && po.grand_total > meuLimite) {
+      setError(
+        `Não pode validar esta adjudicação: o valor (${money(po.grand_total)}) excede o seu limite de autoridade (${money(meuLimite)}).`,
+      );
+      return;
+    }
+
+    const confirmed = window.confirm(`Validar a adjudicação ${po.po_number}? Fica bloqueada para edição.`);
     if (!confirmed) return;
 
     setError(null);
@@ -268,6 +282,7 @@ function ProcurementShell({ session }: { session: Session }) {
   const navItems: NavItem[] = [
     { key: "dashboard", label: "Dashboard", icon: BarChart3 },
     { key: "purchase-orders", label: "Adjudicações", icon: ClipboardList },
+    { key: "accruals", label: "Accruals", icon: TrendingUp },
     { key: "new-po", label: "Nova Adjudicação", icon: FilePlus2, disabled: !canWritePo },
     { key: "suppliers", label: "Fornecedores", icon: Package, disabled: !canManageSuppliers },
     { key: "projects", label: "Obras", icon: Building2, disabled: !canAdmin },
@@ -348,6 +363,7 @@ function ProcurementShell({ session }: { session: Session }) {
                 onValidate={handleValidatePurchaseOrder}
               />
             )}
+            {view === "accruals" && <AccrualsView />}
             {view === "new-po" && (
               <POForm
                 currentStaff={currentStaff}
@@ -656,20 +672,20 @@ function LoginScreen() {
               <input value={email} onChange={(event) => setEmail(event.target.value)} type="email" />
             </label>
             <label>
-              Password
+              Palavra-passe
               <input value={password} onChange={(event) => setPassword(event.target.value)} type="password" />
             </label>
             <div className="button-row">
               <button disabled={busy || !email || !password} onClick={signIn}>
                 <Check size={16} />
-                Sign in
+                Entrar
               </button>
             </div>
             <button type="button" className="link-button" onClick={() => setMode("register")}>
-              Create a new account
+              Criar nova conta
             </button>
             <button type="button" className="link-button" onClick={() => setMode("reset")}>
-              Forgot password?
+              Esqueci a palavra-passe?
             </button>
           </>
         ) : mode === "register" ? (
@@ -679,15 +695,15 @@ function LoginScreen() {
               <input required value={email} onChange={(event) => setEmail(event.target.value)} type="email" />
             </label>
             <label>
-              Full name
+              Nome completo
               <input required value={fullName} onChange={(event) => setFullName(event.target.value)} />
             </label>
             <label>
-              Initials
+              Iniciais
               <input required value={initials} onChange={(event) => setInitials(event.target.value.toUpperCase())} />
             </label>
             <label>
-              Password
+              Palavra-passe
               <input
                 required
                 minLength={6}
@@ -697,7 +713,7 @@ function LoginScreen() {
               />
             </label>
             <label>
-              Confirm password
+              Confirmar palavra-passe
               <input
                 required
                 minLength={6}
@@ -709,11 +725,11 @@ function LoginScreen() {
             <div className="button-row">
               <button disabled={busy || !email || !fullName || !initials || !registrationPassword || !confirmPassword} type="submit">
                 <FilePlus2 size={16} />
-                Request access
+                Pedir acesso
               </button>
               <button type="button" className="secondary" onClick={() => setMode("login")}>
                 <X size={16} />
-                Back
+                Voltar
               </button>
             </div>
           </form>
@@ -726,11 +742,11 @@ function LoginScreen() {
             <div className="button-row">
               <button disabled={busy || !email} type="submit">
                 <RefreshCw size={16} />
-                Send reset email
+                Enviar email de recuperação
               </button>
               <button type="button" className="secondary" onClick={() => setMode("login")}>
                 <X size={16} />
-                Back
+                Voltar
               </button>
             </div>
           </form>
@@ -911,14 +927,14 @@ function SettingsPanel({
         </div>
         <button onClick={() => setEditing({ setting_key: "", setting_value: {}, description: "" })}>
           <Plus size={16} />
-          New
+          Nova
         </button>
       </div>
       {error && <div className="notice error">{error}</div>}
       {editing && (
         <form className="editor-grid" onSubmit={submit}>
           <label>
-            Setting key
+            Chave
             <input name="setting_key" required defaultValue={editing.setting_key} readOnly={Boolean(editing.created_at)} />
           </label>
           <label className="wide">
@@ -1014,6 +1030,11 @@ function StaffAdminView({
           phone: String(form.get("phone") ?? "").trim() || null,
           role,
           is_active: form.get("is_active") === "on",
+          authority_limit: role === "admin"
+            ? null
+            : (form.get("authority_limit") !== null && String(form.get("authority_limit")).trim() !== ""
+                ? Number(form.get("authority_limit"))
+                : 0),
         };
 
         await saveStaffMember(payload, role === "admin" ? [] : selectedProjects);
@@ -1078,14 +1099,21 @@ function StaffAdminView({
           {canAdmin && (
             <>
               <label>
-                Role
+                Função
                 <select name="role" defaultValue={normalizeRole(editing.role)}>
-                  <option value="user">User</option>
-                  <option value="admin">Admin</option>
+                  <option value="user">Utilizador</option>
+                  <option value="admin">Administrador</option>
                 </select>
               </label>
               <label>
-                Active access
+                Limite de autoridade (€, com IVA)
+                <input name="authority_limit" type="number" min="0" step="0.01"
+                  placeholder="Valor máximo que pode validar"
+                  defaultValue={editing.authority_limit ?? ""} />
+                <small className="field-hint">Deixe vazio apenas para administradores (validam qualquer valor).</small>
+              </label>
+              <label>
+                Acesso ativo
                 <input name="is_active" type="checkbox" defaultChecked={Boolean(editing.is_active)} />
               </label>
               <fieldset className="project-access-list wide">
