@@ -50,8 +50,6 @@ import { hasSupabaseConfig, supabase } from "./lib/supabase";
 import { isoToday, money, shortDate } from "./lib/format";
 import { DeliveryReconciliation } from "./DeliveryReconciliation";
 import legendreLogo from "./assets/legendre-logo.png";
-import termsConditionsPage1 from "./assets/terms-conditions-1.png";
-import termsConditionsPage2 from "./assets/terms-conditions-2.png";
 import type {
   AppRole,
   AppSetting,
@@ -817,7 +815,7 @@ function AdminPanel<T extends { id: string; is_active?: boolean } & Record<strin
         {allowCreate && (
           <button onClick={() => setEditing({ is_active: true } as Partial<T>)}>
             <Plus size={16} />
-            New
+            Novo
           </button>
         )}
       </div>
@@ -856,11 +854,11 @@ function AdminPanel<T extends { id: string; is_active?: boolean } & Record<strin
           <div className="button-row wide">
             <button type="submit">
               <Save size={16} />
-              Save
+              Guardar
             </button>
             <button type="button" className="secondary" onClick={() => setEditing(null)}>
               <X size={16} />
-              Cancel
+              Cancelar
             </button>
           </div>
         </form>
@@ -934,11 +932,11 @@ function SettingsPanel({
           <div className="button-row wide">
             <button type="submit">
               <Save size={16} />
-              Save
+              Guardar
             </button>
             <button type="button" className="secondary" onClick={() => setEditing(null)}>
               <X size={16} />
-              Cancel
+              Cancelar
             </button>
           </div>
         </form>
@@ -1054,7 +1052,7 @@ function StaffAdminView({
         {canAdmin && (
           <button onClick={() => editStaff()}>
             <Plus size={16} />
-            New
+            Novo
           </button>
         )}
       </div>
@@ -1112,7 +1110,7 @@ function StaffAdminView({
             </button>
             <button type="button" className="secondary" onClick={() => setEditing(null)}>
               <X size={16} />
-              Cancel
+              Cancelar
             </button>
           </div>
         </form>
@@ -1449,7 +1447,7 @@ function PurchaseOrders({
           </select>
         </label>
         <label>
-          Created by
+          Criado por
           <select value={requesterFilter} onChange={(event) => setRequesterFilter(event.target.value)}>
             <option value="">Todos os utilizadores</option>
             {references.staff.map((member) => (
@@ -1546,15 +1544,15 @@ const DEFAULT_DELIVERY_INSTRUCTIONS =
 const PAYMENT_TERMS_OPTIONS = ["Pronto pagamento", "Fatura a 30 dias", "Fatura a 60 dias"];
 const DELIVERY_TIME_OPTIONS = [
   "",
-  "TBC",
+  "A confirmar",
   "Qualquer hora",
   "Manhã",
   "Tarde",
-  "Before 10:00",
+  "Antes das 10:00",
   "10:00 - 12:00",
   "12:00 - 14:00",
   "14:00 - 16:00",
-  "After 16:00",
+  "Depois das 16:00",
 ];
 
 type PurchaseOrderLineDraft = PurchaseOrderLineItem & {
@@ -1648,7 +1646,7 @@ function POForm({
             activeCategories.find((category) => category.id === (line.category_id ?? editingPurchaseOrder.category_id))?.expense_type ??
             "",
         }))
-      : [{ sort_order: 1, item_ref: "", description: "", quantity: 1, unit: "each", rate: 0, discount_pct: 0, vat_rate: 23, category_id: "", expense_type: "" }]),
+      : [{ sort_order: 1, item_ref: "", description: "", quantity: 1, unit: "un", rate: 0, discount_pct: 0, vat_rate: 23, category_id: "", expense_type: "" }]),
   ]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -1754,7 +1752,7 @@ function POForm({
         )}
         <div className="form-grid">
           <label>
-            Supplier
+            Fornecedor
             <select value={supplierId} onChange={(event) => setSupplierId(event.target.value)} required>
               <option value="">Selecionar fornecedor</option>
               {activeSuppliers.map((item) => (
@@ -1765,7 +1763,7 @@ function POForm({
             </select>
           </label>
           <label>
-            Project / Site
+            Obra
             <select value={projectId} onChange={(event) => changeProject(event.target.value)} required>
               <option value="">Selecionar obra</option>
               {activeProjects.map((item) => (
@@ -1776,14 +1774,14 @@ function POForm({
             </select>
           </label>
           <label>
-            Requester
+            Requisitante
             <div className="readonly-field">
               <strong>{requesterName}</strong>
               <span>{requesterInitials || "Faltam iniciais"}</span>
             </div>
           </label>
           <label>
-            PO date
+            Data da adjudicação
             <input type="date" value={form.po_date} onChange={(event) => setForm({ ...form, po_date: event.target.value })} />
           </label>
           <label>
@@ -1815,11 +1813,11 @@ function POForm({
             />
           </label>
           <label>
-            Delivery date
+            Data de entrega
             <input type="date" value={form.delivery_date} onChange={(event) => setForm({ ...form, delivery_date: event.target.value })} />
           </label>
           <label>
-            Delivery time
+            Hora de entrega
             <select value={form.delivery_time} onChange={(event) => setForm({ ...form, delivery_time: event.target.value })}>
               <option value="">Selecionar hora</option>
               {DELIVERY_TIME_OPTIONS.filter(Boolean).map((option) => (
@@ -1830,7 +1828,7 @@ function POForm({
             </select>
           </label>
           <label className="wide">
-            Delivery / site address
+            Morada de entrega / obra
             <textarea value={form.delivery_address} onChange={(event) => setForm({ ...form, delivery_address: event.target.value })} />
           </label>
         </div>
@@ -1845,9 +1843,9 @@ function POForm({
         <div className="line-editor">
           <div className="section-heading compact-heading">
             <h2>Linhas</h2>
-            <button type="button" onClick={() => setLines([...lines, { sort_order: lines.length + 1, item_ref: "", description: "", quantity: 1, unit: "each", rate: 0, discount_pct: 0, vat_rate: 23, category_id: "", expense_type: "" }])}>
+            <button type="button" onClick={() => setLines([...lines, { sort_order: lines.length + 1, item_ref: "", description: "", quantity: 1, unit: "un", rate: 0, discount_pct: 0, vat_rate: 23, category_id: "", expense_type: "" }])}>
               <Plus size={16} />
-              Add line
+              Adicionar linha
             </button>
           </div>
           <div className="line-header" aria-hidden="true">
@@ -1942,19 +1940,19 @@ function POForm({
             </label>
           </div>
           <label>
-            Site contact
+            Contacto na obra
             <input value={form.site_contact} onChange={(event) => setForm({ ...form, site_contact: event.target.value })} />
           </label>
           <label>
-            Vehicle requirements
+            Requisitos de veículo
             <input value={form.vehicle_requirements} onChange={(event) => setForm({ ...form, vehicle_requirements: event.target.value })} />
           </label>
           <label className="wide">
-            Offloading
+            Descarga
             <textarea value={form.offloading_instructions} onChange={(event) => setForm({ ...form, offloading_instructions: event.target.value })} />
           </label>
           <label className="wide">
-            Delivery instructions
+            Instruções de entrega
             <textarea value={form.delivery_instructions} onChange={(event) => setForm({ ...form, delivery_instructions: event.target.value })} />
           </label>
           <label className="wide">
@@ -1982,7 +1980,7 @@ function POForm({
           {!editingPurchaseOrder && (
             <button type="button" className="secondary" onClick={onDone}>
               <X size={16} />
-              Cancel
+              Cancelar
             </button>
           )}
         </div>
@@ -2033,6 +2031,16 @@ function PreviewModal({ po, settings, onClose, canWrite }: { po: PurchaseOrder; 
 
 function PurchaseOrderPreview({ po, company }: { po: PurchaseOrder; company: Record<string, string> }) {
   const invoiceEmail = company.accounts_email ?? "";
+  // resumo por código analítico (para o rodapé do documento)
+  const analyticSummary = (() => {
+    const map = new Map<string, number>();
+    (po.line_items ?? []).forEach((line) => {
+      const code = line.category?.category_code ?? "—";
+      const value = line.line_total ?? line.quantity * line.rate * (1 - (line.discount_pct ?? 0) / 100);
+      map.set(code, (map.get(code) ?? 0) + value);
+    });
+    return Array.from(map.entries()).map(([code, value]) => ({ code, value }));
+  })();
   return (
     <div className="print-area">
       <article className="po-page po-order-page">
@@ -2063,7 +2071,15 @@ function PurchaseOrderPreview({ po, company }: { po: PurchaseOrder; company: Rec
           </div>
           <div>
             <span>Estado</span>
-            <strong>{po.status}</strong>
+            <strong>{po.status === "validated" ? "Validada" : "Rascunho"}</strong>
+          </div>
+          <div>
+            <span>Condições de pagamento</span>
+            <strong>{po.payment_terms ?? "—"}</strong>
+          </div>
+          <div>
+            <span>Código de obra na fatura</span>
+            <strong>{po.invoice_project_code ?? "—"}</strong>
           </div>
           <div>
             <span>Data de entrega</span>
@@ -2108,6 +2124,7 @@ function PurchaseOrderPreview({ po, company }: { po: PurchaseOrder; company: Rec
             <col className="po-line-quantity" />
             <col className="po-line-unit" />
             <col className="po-line-rate" />
+            <col className="po-line-disc" />
             <col className="po-line-vat" />
             <col className="po-line-total" />
           </colgroup>
@@ -2118,7 +2135,8 @@ function PurchaseOrderPreview({ po, company }: { po: PurchaseOrder; company: Rec
               <th>Quantidade</th>
               <th>Unidade</th>
               <th>Preço unitário</th>
-              <th>VAT</th>
+              <th>Desc.</th>
+              <th>IVA</th>
               <th>Total</th>
             </tr>
           </thead>
@@ -2130,8 +2148,9 @@ function PurchaseOrderPreview({ po, company }: { po: PurchaseOrder; company: Rec
                 <td>{line.quantity}</td>
                 <td>{line.unit}</td>
                 <td>{money(line.rate)}</td>
+                <td>{(line.discount_pct ?? 0) > 0 ? `${line.discount_pct}%` : "—"}</td>
                 <td>{line.vat_rate}%</td>
-                <td>{money(line.line_total ?? line.quantity * line.rate)}</td>
+                <td>{money(line.line_total ?? line.quantity * line.rate * (1 - (line.discount_pct ?? 0) / 100))}</td>
               </tr>
             ))}
           </tbody>
@@ -2164,60 +2183,69 @@ function PurchaseOrderPreview({ po, company }: { po: PurchaseOrder; company: Rec
             <p>{po.notes}</p>
           </section>
         )}
+        <section className="po-analytic-footer">
+          <table className="po-analytic-table">
+            <thead><tr><th>Código analítico</th><th>Valor</th></tr></thead>
+            <tbody>
+              {analyticSummary.map((row) => (
+                <tr key={row.code}><td>{row.code}</td><td>{money(row.value)}</td></tr>
+              ))}
+            </tbody>
+          </table>
+          <p className="po-vat-note">Aos valores apresentados acresce o IVA à taxa legal em vigor.</p>
+        </section>
         <footer className="po-footer">
-          All invoices must be sent as a .pdf file via email to {invoiceEmail} and must be addressed to Legendre UK
-          Limited, Ground Floor, Peer House, 8-14 Verulam Street, London, WC1X 8LZ. Please include the corresponding
-          Purchase Order Number. Legendre UK does not accept responsibility for delays in payments of invoices sent via
-          post or to a different email address.
+          {invoiceEmail
+            ? `As faturas devem ser enviadas em formato .pdf para ${invoiceEmail}, indicando o número da adjudicação.`
+            : "As faturas devem indicar sempre o número da adjudicação (N/Ref.ª) e o código de obra."}
         </footer>
       </article>
-      {po.include_driver_leaflet && (
-        <article className="po-page driver-page">
-          <h2>Drivers Leaflet - Rev 3.0</h2>
-          <p className="driver-lead">To be rigorously respected on site:</p>
-          <ul>
-            {driverRules.map((rule) => (
-              <li key={rule}>{rule}</li>
-            ))}
-          </ul>
-        </article>
-      )}
       {po.include_terms_conditions && (
-        <>
-          <article className="po-page terms-page">
-            <img src={termsConditionsPage1} alt="Legendre terms and conditions page 1" />
-          </article>
-          <article className="po-page terms-page">
-            <img src={termsConditionsPage2} alt="Legendre terms and conditions page 2" />
-          </article>
-        </>
+        <article className="po-page clausulas-page">
+          <div className="po-clausulas-header">
+            <img className="po-logo-image" src={legendreLogo} alt="Legendre" />
+            <div className="po-company">
+              <strong>{company.name ?? "Legendre"}</strong>
+              <span>{company.legal_name ?? "LEGDR Engenharia e Construção, Unipessoal Lda"}</span>
+              {company.vat_number && <span>NIF: {company.vat_number}</span>}
+            </div>
+          </div>
+          <ol className="po-clausulas">
+            {clausulasAdjudicacao.map((clausula, index) => (
+              <li key={index}>{clausula}</li>
+            ))}
+          </ol>
+          <div className="po-signatures">
+            <div className="po-sign-block">
+              <span className="po-sign-label">Pela LEGDR</span>
+              <div className="po-sign-line" />
+            </div>
+            <div className="po-sign-block">
+              <span className="po-sign-label">Pelo FORNECEDOR</span>
+              <div className="po-sign-line" />
+            </div>
+          </div>
+        </article>
       )}
     </div>
   );
 }
 
-const driverRules = [
-  "Deliveries and collection vehicles must report on arrival at the site gate to the Traffic Marshal who will check in the vehicle, assist, and make safe the access.",
-  "Duty to warn: everybody must report to Project Management and warn of any danger that could cause injuries to themselves or any third party.",
-  "No smoking or e-smoking is permitted at any time on site unless in designated areas.",
-  "No drugs or alcohol are to be consumed during work hours. Drivers will not be permitted on site if under the influence of alcohol, drugs, or medication.",
-  "All accidents, incidents, near misses, and unsafe acts or conditions are to be reported to Legendre UK immediately.",
-  "Toda a sinalização de Segurança e Saúde na obra deve ser respeitada.",
-  "Drivers have the right to refuse a task where there is a health and safety risk that is not adequately controlled.",
-  "Beware of pedestrians and other road users when leaving the site.",
-  "All drivers must be in possession of a valid driving licence and suitable driver training.",
-  "All vehicles are to stop at the exit gate before moving onto the public highway and take great care around bicycles, children, pedestrians, and other vehicles.",
-  "No reversing when leaving the site without a Traffic Marshal directing the vehicle.",
-  "Drivers must use pedestrian walkways to access welfare facilities and must not walk around the main site area unless inducted or accompanied.",
-  "Drivers are not to use mobile phones while driving.",
-  "No access is permitted onto the backs of lorries or trailers without full edge protection and protection from falls.",
-  "Unless operationally essential, engines must be switched off and brakes applied.",
-  "Drivers must follow site signage and instructions from the Banksman, Traffic Marshal, Site Logistics Manager, or Legendre UK staff.",
-  "Whenever leaving the vehicle, drivers must wear minimum PPE: hard hat, hi-viz clothing, safety gloves, safety footwear, and safety eyewear.",
-  "Shorts cannot be worn at any time whilst outside of the vehicle.",
-  "Only authorised vehicles will be allowed to enter the site and must comply with Traffic Marshal directions. Early or late arrivals may be turned away.",
-  "The speed limit on site is 5mph, equal to 8km/h.",
+// 11 cláusulas legais da Adjudicação (texto PT do modelo LEGDR)
+const clausulasAdjudicacao = [
+  "As faturas deverão referir sempre a nossa referência de adjudicação (N/Ref.ª) e o Código de Obra.",
+  "As faturas deverão vir sempre acompanhadas de documento comprovativo da boa receção dos materiais em obra, sem os quais não serão aceites na nossa contabilidade.",
+  "Os originais das faturas deverão dar entrada nos nossos serviços até ao dia 5 do mês seguinte ao fornecimento, caso contrário transitará para o mês seguinte, podendo atrasar o pagamento até ao máximo de um mês.",
+  "É obrigatório que o número do documento das adjudicações/contratos, bem como o nome da obra ou departamento de destino do fornecimento, constem dos respetivos autos de medição, guias de remessa e faturas de fornecimento, caso contrário serão imediatamente devolvidos.",
+  "Com a assinatura do presente, o FORNECEDOR concorda com o cumprimento do prazo de entrega estabelecido no cabeçalho da presente notificação de adjudicação.",
+  "Exclui-se da responsabilidade do FORNECEDOR o não cumprimento dos prazos estabelecidos por casos de força maior relacionadas com atos de guerra ou subversão, epidemias, ciclones, tremores de terra ou outros que venham a ter o reconhecimento expresso pela LEGDR.",
+  "A resolução de todas as divergências ou questões emergentes do contrato, sua interpretação e aplicação, procurarão ser resolvidas por ambas as outorgantes através da livre negociação de boa-fé.",
+  "No caso de a faculdade prevista no artigo anterior não se revelar por si só suficiente para a resolução a contento das partes, os litígios decorrentes da execução, interpretação e aplicação do presente contrato e de eventuais aditamentos ao mesmo, serão obrigatoriamente submetidos ao tribunal de Lisboa, renunciando desde já as OUTORGANTES a qualquer outro.",
+  "Caso se verifiquem divergências entre o presente contrato e quaisquer dos seus anexos ou documentos que o integram, o conteúdo do título contratual prevalecerá sobre os Anexos e restantes documentos, excetuando-se os casos em que exista acordo expresso entre as partes.",
+  "O FORNECEDOR declara, com a assinatura deste contrato, a correspondência do material fornecido com o que foi solicitado pela LEGDR, bem como o cumprimento de todas as características físicas e químicas mínimas definidas por esta.",
+  "A LEGDR reserva-se no direito realizar ensaios de caracterização de materiais, recorrendo a laboratórios externos devidamente credenciados.",
 ];
+
 
 function Exports({ references, purchaseOrders }: { references: ReferenceData; purchaseOrders: PurchaseOrder[] }) {
   const exports = [
