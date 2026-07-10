@@ -1312,3 +1312,60 @@ th {
     display: none !important;
   }
 }
+
+/* ─── Lote 3C: documento — código analítico, cláusulas, assinaturas ─── */
+.po-line-disc { width: 7%; }
+.po-analytic-footer {
+  margin-top: 18px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 20px;
+}
+.po-analytic-table {
+  border-collapse: collapse;
+  font-size: 11px;
+  min-width: 260px;
+}
+.po-analytic-table th,
+.po-analytic-table td {
+  border: 1px solid #111;
+  padding: 4px 8px;
+  text-align: left;
+}
+.po-analytic-table th { background: #111; color: #fff; }
+.po-analytic-table td:last-child,
+.po-analytic-table th:last-child { text-align: right; }
+.po-vat-note { font-size: 11px; font-style: italic; color: #444; }
+
+.clausulas-page { padding: 20mm 18mm; }
+.po-clausulas-header {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  margin-bottom: 20px;
+  border-bottom: 1px solid #ccc;
+  padding-bottom: 12px;
+}
+.po-clausulas-header .po-company { display: flex; flex-direction: column; font-size: 11px; }
+.po-clausulas-header .po-company strong { font-size: 13px; }
+.po-clausulas {
+  font-size: 10.5px;
+  line-height: 1.5;
+  color: #1a1a1a;
+  padding-left: 18px;
+}
+.po-clausulas li { margin-bottom: 8px; text-align: justify; }
+.po-signatures {
+  display: flex;
+  justify-content: space-between;
+  gap: 60px;
+  margin-top: 60px;
+}
+.po-sign-block { flex: 1; }
+.po-sign-label { font-size: 11px; font-weight: 600; }
+.po-sign-line {
+  margin-top: 50px;
+  border-top: 1px solid #333;
+  width: 100%;
+}
