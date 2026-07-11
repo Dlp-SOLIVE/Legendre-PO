@@ -25,6 +25,7 @@ import {
   Users,
   X,
   TrendingUp,
+  Repeat,
 } from "lucide-react";
 import {
   createPurchaseOrder,
@@ -51,6 +52,7 @@ import { hasSupabaseConfig, supabase } from "./lib/supabase";
 import { isoToday, money, shortDate } from "./lib/format";
 import { DeliveryReconciliation } from "./DeliveryReconciliation";
 import { AccrualsView } from "./AccrualsView";
+import { ReinvoicingView } from "./ReinvoicingView";
 import legendreLogo from "./assets/legendre-logo.png";
 import type {
   AppRole,
@@ -70,6 +72,7 @@ type ViewKey =
   | "dashboard"
   | "purchase-orders"
   | "accruals"
+  | "reinvoicing"
   | "new-po"
   | "suppliers"
   | "projects"
@@ -158,7 +161,7 @@ function ProcurementShell({ session }: { session: Session }) {
       setPurchaseOrders(nextPos);
       return { references: nextRefs, purchaseOrders: nextPos };
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to load procurement data.");
+      setError(err instanceof Error ? err.message : "Não foi possível carregar os dados.");
       return null;
     } finally {
       setLoading(false);
@@ -223,7 +226,7 @@ function ProcurementShell({ session }: { session: Session }) {
 
   async function handleCopyPurchaseOrder(po: PurchaseOrder) {
     if (!currentStaff) {
-      setError("Your signed-in email must match a staff record before you can copy a purchase order.");
+      setError("O email com que iniciou sessão tem de corresponder a um registo de equipa para poder copiar uma adjudicação.");
       return;
     }
 
@@ -283,6 +286,7 @@ function ProcurementShell({ session }: { session: Session }) {
     { key: "dashboard", label: "Dashboard", icon: BarChart3 },
     { key: "purchase-orders", label: "Adjudicações", icon: ClipboardList },
     { key: "accruals", label: "Accruals", icon: TrendingUp },
+    { key: "reinvoicing", label: "Refaturação", icon: Repeat, disabled: !canAdmin },
     { key: "new-po", label: "Nova Adjudicação", icon: FilePlus2, disabled: !canWritePo },
     { key: "suppliers", label: "Fornecedores", icon: Package, disabled: !canManageSuppliers },
     { key: "projects", label: "Obras", icon: Building2, disabled: !canAdmin },
@@ -330,7 +334,7 @@ function ProcurementShell({ session }: { session: Session }) {
           <div className="user-strip">
             <span className={`role-pill ${role}`}>{role}</span>
             <span>{currentStaff?.full_name ?? session.user.email}</span>
-            <button className="icon-button" onClick={refresh} title="Refresh data">
+            <button className="icon-button" onClick={refresh} title="Atualizar dados">
               <RefreshCw size={18} />
             </button>
             <button className="icon-button" onClick={() => supabase?.auth.signOut()} title="Terminar sessão">
@@ -364,6 +368,7 @@ function ProcurementShell({ session }: { session: Session }) {
               />
             )}
             {view === "accruals" && <AccrualsView />}
+            {view === "reinvoicing" && <ReinvoicingView currentStaffId={currentStaff?.id ?? null} />}
             {view === "new-po" && (
               <POForm
                 currentStaff={currentStaff}
@@ -415,6 +420,8 @@ function ProcurementShell({ session }: { session: Session }) {
                   { name: "default_vehicle_requirements", label: "Requisitos de veículo (por defeito)", type: "textarea" },
                   { name: "default_offloading_instructions", label: "Instruções de descarga (por defeito)", type: "textarea" },
                   { name: "default_delivery_instructions", label: "Instruções de entrega (por defeito)", type: "textarea" },
+                  { name: "is_consortium", label: "Obra em consórcio (Tecnibuild)", type: "checkbox" },
+                  { name: "consortium_share", label: "Quota a redebitar (%)", type: "number" },
                   { name: "is_active", label: "Ativo", type: "checkbox" },
                 ]}
                 onSave={upsertProject}
@@ -433,7 +440,7 @@ function ProcurementShell({ session }: { session: Session }) {
                 fields={[
                   { name: "expense_type", label: "Tipo de despesa", required: true },
                   { name: "category_name", label: "Tipo detalhado de despesa", required: true },
-                  { name: "category_code", label: "Code", required: true },
+                  { name: "category_code", label: "Código", required: true },
                   { name: "is_active", label: "Ativo", type: "checkbox" },
                 ]}
                 onSave={upsertCategory}
@@ -516,7 +523,7 @@ function ResetPasswordScreen({ onDone }: { onDone: () => void }) {
     event.preventDefault();
     if (!supabase) return;
     if (newPassword.length < 6) {
-      setMessage("Password must be at least 6 characters.");
+      setMessage("A palavra-passe deve ter pelo menos 6 caracteres.");
       return;
     }
     if (newPassword !== confirmPassword) {
@@ -613,7 +620,7 @@ function LoginScreen() {
     event.preventDefault();
     if (!supabase) return;
     if (registrationPassword.length < 6) {
-      setMessage("Password must be at least 6 characters.");
+      setMessage("A palavra-passe deve ter pelo menos 6 caracteres.");
       return;
     }
     if (registrationPassword !== confirmPassword) {
@@ -760,7 +767,7 @@ function LoginScreen() {
 type FieldDef<T> = {
   name: keyof T & string;
   label: string;
-  type?: "text" | "email" | "textarea" | "checkbox" | "select";
+  type?: "text" | "email" | "textarea" | "checkbox" | "select" | "number";
   required?: boolean;
   options?: { value: string; label: string }[];
 };
@@ -798,6 +805,9 @@ function AdminPanel<T extends { id: string; is_active?: boolean } & Record<strin
     fields.forEach((field) => {
       if (field.type === "checkbox") {
         payload[field.name] = form.get(field.name) === "on";
+      } else if (field.type === "number") {
+        const raw = String(form.get(field.name) ?? "").trim();
+        payload[field.name] = raw === "" ? null : Number(raw);
       } else {
         payload[field.name] = String(form.get(field.name) ?? "").trim() || null;
       }
@@ -848,7 +858,7 @@ function AdminPanel<T extends { id: string; is_active?: boolean } & Record<strin
                   defaultValue={(editing[field.name] as string | null | undefined) ?? ""}
                 />
               ) : field.type === "checkbox" ? (
-                <input name={field.name} type="checkbox" defaultChecked={Boolean(editing[field.name] ?? true)} />
+                <input name={field.name} type="checkbox" defaultChecked={editing[field.name] !== undefined ? Boolean(editing[field.name]) : field.name === "is_active"} />
               ) : field.type === "select" ? (
                 <select name={field.name} defaultValue={(editing[field.name] as string | undefined) ?? field.options?.[0]?.value}>
                   {field.options?.map((option) => (
@@ -1225,7 +1235,7 @@ function DataTable<T extends Record<string, unknown>>({
               <td>{row.is_active === false ? "Inativo" : "Ativo"}</td>
               <td className="actions-cell">
                 {onEdit && (
-                  <button className="icon-button" onClick={() => onEdit(row)} title="Edit">
+                  <button className="icon-button" onClick={() => onEdit(row)} title="Editar">
                     <Save size={16} />
                   </button>
                 )}
@@ -1283,8 +1293,8 @@ function Dashboard({ purchaseOrders, references }: { purchaseOrders: PurchaseOrd
         <Kpi label="Valor validado" value={money(filtered.filter((po) => po.status === "validated").reduce((sum, po) => sum + po.grand_total, 0))} />
       </div>
       <div className="dashboard-grid">
-        <SpendPanel title="Custo por obra" rows={groupSpend(filtered, (po) => po.project?.project_name ?? "Unassigned")} />
-        <SpendPanel title="Custo por fornecedor" rows={groupSpend(filtered, (po) => po.supplier?.supplier_name ?? "Unassigned")} />
+        <SpendPanel title="Custo por obra" rows={groupSpend(filtered, (po) => po.project?.project_name ?? "Sem atribuição")} />
+        <SpendPanel title="Custo por fornecedor" rows={groupSpend(filtered, (po) => po.supplier?.supplier_name ?? "Sem atribuição")} />
         <SpendPanel title="Custo por categoria" rows={groupLineSpend(filtered)} />
         <RecentOrders purchaseOrders={filtered.slice(0, 8)} />
       </div>
@@ -1515,13 +1525,13 @@ function PurchaseOrders({
                   </td>
                   <td>{money(po.grand_total)}</td>
                   <td className="actions-cell">
-                    <button className="icon-button" onClick={() => onPreview(po)} title="Preview">
+                    <button className="icon-button" onClick={() => onPreview(po)} title="Pré-visualizar">
                       <Eye size={16} />
                     </button>
                     <button className="icon-button" disabled={!canWrite || po.status !== "draft"} onClick={() => onEdit(po)} title="Editar rascunho">
                       <Pencil size={16} />
                     </button>
-                    <button className="icon-button" disabled={!canWrite || po.status !== "draft"} onClick={() => onValidate(po)} title="Validate PO">
+                    <button className="icon-button" disabled={!canWrite || po.status !== "draft"} onClick={() => onValidate(po)} title="Validar adjudicação">
                       <ArrowRight size={16} />
                     </button>
                     <button className="icon-button" disabled={!canWrite} onClick={() => onCopy(po)} title="Copiar para novo rascunho">
@@ -1567,7 +1577,7 @@ function formatProjectSiteContact(project?: Project | null) {
 const DEFAULT_VEHICLE_REQUIREMENTS = "Vehicle to have accreditation FORS Silver as a minimum.";
 const DEFAULT_OFFLOADING_INSTRUCTIONS = "À mão, durante o horário de entregas na obra.";
 const DEFAULT_DELIVERY_INSTRUCTIONS =
-  "Please call site contact 30 minutes prior to arrival. All drivers must be aware of the site and delivery rules as per the Driver's Leaflet.";
+  "Contactar o responsável da obra 30 minutos antes da chegada. Todos os motoristas devem cumprir as regras da obra e de entrega.";
 
 const PAYMENT_TERMS_OPTIONS = ["Pronto pagamento", "Fatura a 30 dias", "Fatura a 60 dias"];
 const DELIVERY_TIME_OPTIONS = [
@@ -1709,7 +1719,7 @@ function POForm({
       return;
     }
     if (!requesterId) {
-      setError("Your signed-in email must match a staff record before you can create a purchase order.");
+      setError("O email com que iniciou sessão tem de corresponder a um registo de equipa para poder criar uma adjudicação.");
       return;
     }
     const cleanLines = lines.filter((line) => line.description.trim());
@@ -2283,7 +2293,7 @@ function Exports({ references, purchaseOrders }: { references: ReferenceData; pu
       action: () =>
         downloadCsv(
           "legendre-suppliers.csv",
-          ["Name", "Código de conta", "Contacto", "Email", "Phone", "Morada", "NIF", "Ativo"],
+          ["Nome", "Código de conta", "Contacto", "Email", "Telefone", "Morada", "NIF", "Ativo"],
           references.suppliers.map((row) => [
             row.supplier_name,
             row.account_code,
@@ -2302,7 +2312,7 @@ function Exports({ references, purchaseOrders }: { references: ReferenceData; pu
       action: () =>
         downloadCsv(
           "legendre-projects.csv",
-          ["Name", "Code", "Site address", "Centro de custo", "Entrega (por defeito)", "Site contact", "Site contact phone", "Ativo"],
+          ["Nome", "Código", "Morada da obra", "Centro de custo", "Entrega (por defeito)", "Contacto na obra", "Telefone do contacto", "Ativo"],
           references.projects.map((row) => [
             row.project_name,
             row.project_code,
@@ -2321,7 +2331,7 @@ function Exports({ references, purchaseOrders }: { references: ReferenceData; pu
       action: () =>
         downloadCsv(
           "legendre-staff.csv",
-          ["Nome completo", "Iniciais", "Email", "Phone", "Role", "Ativo"],
+          ["Nome completo", "Iniciais", "Email", "Telefone", "Função", "Ativo"],
           references.staff.map((row) => [row.full_name, row.initials, row.email, row.phone, row.role, row.is_active]),
         ),
     },
@@ -2331,7 +2341,7 @@ function Exports({ references, purchaseOrders }: { references: ReferenceData; pu
       action: () =>
         downloadCsv(
           "legendre-purchase-orders.csv",
-          ["Nº Adjudicação", "Date", "Data de entrega", "Hora de entrega", "Estado", "Obra", "Fornecedor", "Subtotal", "VAT", "Total"],
+          ["Nº Adjudicação", "Data", "Data de entrega", "Hora de entrega", "Estado", "Obra", "Fornecedor", "Subtotal", "IVA", "Total"],
           purchaseOrders.map((po) => [
             po.po_number,
             po.po_date,
@@ -2352,7 +2362,7 @@ function Exports({ references, purchaseOrders }: { references: ReferenceData; pu
       action: () =>
         downloadCsv(
           "legendre-po-line-items.csv",
-          ["Nº Adjudicação", "Obra", "Fornecedor", "Ref. artigo", "Descrição", "Categoria", "Quantidade", "Unit", "Rate", "VAT rate", "Total da linha"],
+          ["Nº Adjudicação", "Obra", "Fornecedor", "Ref. artigo", "Descrição", "Categoria", "Quantidade", "Unidade", "Preço unitário", "Taxa IVA", "Total da linha"],
           purchaseOrders.flatMap((po) =>
             (po.line_items ?? []).map((line) => [
               po.po_number,
