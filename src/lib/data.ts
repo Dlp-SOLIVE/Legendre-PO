@@ -505,3 +505,35 @@ export async function deleteAnexo(path: string): Promise<void> {
   const { error } = await client.storage.from(ANEXOS_BUCKET).remove([path]);
   if (error) throw error;
 }
+
+// ─────────────────────────────────────────────
+// LOTE 4 — Refaturação ao consórcio
+// ─────────────────────────────────────────────
+
+export async function loadConsortiumReinvoicing() {
+  const client = requireClient();
+  const { data, error } = await client
+    .from("v_consortium_reinvoicing")
+    .select("*")
+    .order("month", { ascending: false });
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function markReinvoiced(projectId: string, month: string, amount: number, staffId: string | null) {
+  const client = requireClient();
+  const { error } = await client
+    .from("consortium_reinvoicing")
+    .insert({ project_id: projectId, month, amount, reinvoiced_by: staffId });
+  if (error) throw error;
+}
+
+export async function unmarkReinvoiced(projectId: string, month: string) {
+  const client = requireClient();
+  const { error } = await client
+    .from("consortium_reinvoicing")
+    .delete()
+    .eq("project_id", projectId)
+    .eq("month", month);
+  if (error) throw error;
+}
