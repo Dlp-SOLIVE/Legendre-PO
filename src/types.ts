@@ -21,6 +21,8 @@ export type Project = {
   project_name: string;
   project_code: string;
   adj_code: string | null;
+  is_consortium?: boolean;
+  consortium_share?: number;
   site_address: string | null;
   cost_centre_code: string | null;
   default_delivery_address: string | null;
@@ -196,6 +198,18 @@ export type AccrualByProjectMonth = {
   value_received: number;
   value_invoiced: number;
   accrual_value: number;
+};
+
+export type ConsortiumReinvoicing = {
+  project_id: string;
+  project_name: string;
+  consortium_share: number;
+  month: string;
+  value_invoiced: number;
+  redebito: number;
+  ja_refaturado: boolean;
+  reinvoiced_at: string | null;
+  redebito_registado: number | null;
 };
 
 export type ReferenceData = {
