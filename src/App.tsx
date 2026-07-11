@@ -1314,15 +1314,15 @@ function FilterBar({
   return (
     <div className="filters">
       <label>
-        From
+        De
         <input type="date" value={filters.from} onChange={(event) => setFilters({ ...filters, from: event.target.value })} />
       </label>
       <label>
-        To
+        Até
         <input type="date" value={filters.to} onChange={(event) => setFilters({ ...filters, to: event.target.value })} />
       </label>
       <label>
-        Project
+        Obra
         <select value={filters.projectId} onChange={(event) => setFilters({ ...filters, projectId: event.target.value })}>
           <option value="">Todas as obras</option>
           {references.projects.map((project) => (
@@ -1333,7 +1333,7 @@ function FilterBar({
         </select>
       </label>
       <label>
-        Supplier
+        Fornecedor
         <select value={filters.supplierId} onChange={(event) => setFilters({ ...filters, supplierId: event.target.value })}>
           <option value="">Todos os fornecedores</option>
           {references.suppliers.map((supplier) => (
@@ -1344,12 +1344,12 @@ function FilterBar({
         </select>
       </label>
       <label>
-        Status
+        Estado
         <select value={filters.status} onChange={(event) => setFilters({ ...filters, status: event.target.value })}>
           <option value="">Todos os estados</option>
           {statuses.map((status) => (
             <option value={status} key={status}>
-              {status}
+              {status === "validated" ? "Validada" : "Rascunho"}
             </option>
           ))}
         </select>
@@ -1474,7 +1474,7 @@ function PurchaseOrders({
     <section className="work-section">
       <div className="po-list-toolbar">
         <label>
-          Project
+          Obra
           <select value={projectFilter} onChange={(event) => setProjectFilter(event.target.value)}>
             <option value="">Todas as obras</option>
             {references.projects.map((project) => (
