@@ -1431,3 +1431,21 @@ th {
   font-size: 12px;
   padding: 6px 0;
 }
+
+/* Lote 4: refaturação — badges de estado */
+.badge-done {
+  background: #e3f4e8;
+  color: #1a7f3c;
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 20px;
+}
+.badge-pending {
+  background: #fff3e0;
+  color: #b06f00;
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 20px;
+}
