@@ -97,6 +97,7 @@ const emptyReferences: ReferenceData = {
   settings: [],
 };
 
+const VAT_RATES = [23, 13, 6, 0];
 const statuses: PurchaseOrderStatus[] = ["draft", "validated"];
 
 export function App() {
@@ -1700,6 +1701,39 @@ function POForm({
     setLines((current) => current.map((line, lineIndex) => (lineIndex === index ? { ...line, ...patch } : line)));
   }
 
+  // ── Batch apply: aplicar um campo a várias linhas de uma vez ──
+  const [selectedLines, setSelectedLines] = useState<Set<number>>(new Set());
+  const [batchField, setBatchField] = useState("vat_rate");
+  const [batchValue, setBatchValue] = useState("");
+
+  function toggleLineSelected(index: number) {
+    setSelectedLines((current) => {
+      const next = new Set(current);
+      if (next.has(index)) next.delete(index); else next.add(index);
+      return next;
+    });
+  }
+  function toggleAllLines() {
+    setSelectedLines((current) => (current.size === lines.length ? new Set() : new Set(lines.map((_, i) => i))));
+  }
+  function applyBatch() {
+    if (selectedLines.size === 0) return;
+    setLines((current) => current.map((line, index) => {
+      if (!selectedLines.has(index)) return line;
+      if (batchField === "vat_rate") return { ...line, vat_rate: Number(batchValue) };
+      if (batchField === "discount_pct") return { ...line, discount_pct: Number(batchValue) };
+      if (batchField === "discount_pct_2") return { ...line, discount_pct_2: Number(batchValue) };
+      if (batchField === "category") {
+        const chosen = activeCategories.find((cat) => {
+          const label = cat.category_code ? `${cat.category_name} (${cat.category_code})` : cat.category_name;
+          return label === batchValue;
+        });
+        if (chosen) return { ...line, category_id: chosen.id, expense_type: chosen.expense_type ?? "" };
+      }
+      return line;
+    }));
+  }
+
   function changeProject(nextProjectId: string) {
     const nextProject = references.projects.find((item) => item.id === nextProjectId);
     setProjectId(nextProjectId);
@@ -1888,12 +1922,37 @@ function POForm({
               Adicionar linha
             </button>
           </div>
+          {selectedLines.size > 0 && (
+            <div className="batch-apply">
+              <span className="batch-count">{selectedLines.size} linha(s) selecionada(s)</span>
+              <span>Aplicar</span>
+              <select value={batchField} onChange={(event) => { setBatchField(event.target.value); setBatchValue(""); }}>
+                <option value="vat_rate">IVA</option>
+                <option value="discount_pct">Desc. 1 %</option>
+                <option value="discount_pct_2">Desc. 2 %</option>
+                <option value="category">Categoria / Subcategoria</option>
+              </select>
+              {batchField === "vat_rate" ? (
+                <select value={batchValue} onChange={(event) => setBatchValue(event.target.value)}>
+                  <option value="">—</option>
+                  {VAT_RATES.map((rate) => (<option value={rate} key={rate}>{rate === 0 ? "Isento" : `${rate}%`}</option>))}
+                </select>
+              ) : batchField === "category" ? (
+                <input list="subcategorias-list" placeholder="Procurar subcategoria…" value={batchValue} onChange={(event) => setBatchValue(event.target.value)} />
+              ) : (
+                <input type="number" min="0" max="100" step="0.5" placeholder="%" value={batchValue} onChange={(event) => setBatchValue(event.target.value)} />
+              )}
+              <button type="button" onClick={applyBatch} disabled={batchValue === ""}>Aplicar às selecionadas</button>
+              <button type="button" className="secondary" onClick={() => setSelectedLines(new Set())}>Limpar seleção</button>
+            </div>
+          )}
           <datalist id="subcategorias-list">
             {activeCategories.map((cat) => (
               <option value={cat.category_code ? `${cat.category_name} (${cat.category_code})` : cat.category_name} key={cat.id} />
             ))}
           </datalist>
           <div className="line-header" aria-hidden="true">
+            <span><input type="checkbox" checked={lines.length > 0 && selectedLines.size === lines.length} onChange={toggleAllLines} title="Selecionar todas" /></span>
             <span>Ref. artigo</span>
             <span>Descrição</span>
             <span>Categoria</span>
@@ -1912,7 +1971,8 @@ function POForm({
             const selectedExpenseType = line.expense_type || selectedCategory?.expense_type || "";
 
             return (
-              <div className="line-row" key={index}>
+              <div className={selectedLines.has(index) ? "line-row line-row-selected" : "line-row"} key={index}>
+                <input type="checkbox" className="line-select" checked={selectedLines.has(index)} onChange={() => toggleLineSelected(index)} />
                 <input placeholder="Ref. artigo" value={line.item_ref ?? ""} onChange={(event) => updateLine(index, { item_ref: event.target.value })} />
                 <input placeholder="Descrição" value={line.description} onChange={(event) => updateLine(index, { description: event.target.value })} />
                 <input
