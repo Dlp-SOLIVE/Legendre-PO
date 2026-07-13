@@ -261,6 +261,7 @@ function ProcurementShell({ session }: { session: Session }) {
         unit: line.unit,
         rate: Number(line.rate),
         discount_pct: Number(line.discount_pct ?? 0),
+        discount_pct_2: Number(line.discount_pct_2 ?? 0),
         vat_rate: Number(line.vat_rate),
         item_ref: line.item_ref ?? null,
         category_id: line.category_id ?? po.category_id ?? null,
@@ -1677,6 +1678,7 @@ function POForm({
           unit: line.unit,
           rate: Number(line.rate),
           discount_pct: Number(line.discount_pct ?? 0),
+        discount_pct_2: Number(line.discount_pct_2 ?? 0),
           vat_rate: Number(line.vat_rate),
           category_id: line.category_id ?? editingPurchaseOrder.category_id ?? "",
           expense_type:
@@ -1684,15 +1686,15 @@ function POForm({
             activeCategories.find((category) => category.id === (line.category_id ?? editingPurchaseOrder.category_id))?.expense_type ??
             "",
         }))
-      : [{ sort_order: 1, item_ref: "", description: "", quantity: 1, unit: "un", rate: 0, discount_pct: 0, vat_rate: 23, category_id: "", expense_type: "" }]),
+      : [{ sort_order: 1, item_ref: "", description: "", quantity: 1, unit: "un", rate: 0, discount_pct: 0, discount_pct_2: 0, vat_rate: 23, category_id: "", expense_type: "" }]),
   ]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   const supplier = references.suppliers.find((item) => item.id === supplierId) ?? null;
   const project = references.projects.find((item) => item.id === projectId) ?? null;
-  const subtotal = lines.reduce((sum, item) => sum + item.quantity * item.rate * (1 - (item.discount_pct ?? 0) / 100), 0);
-  const vatTotal = lines.reduce((sum, item) => sum + item.quantity * item.rate * (1 - (item.discount_pct ?? 0) / 100) * (item.vat_rate / 100), 0);
+  const subtotal = lines.reduce((sum, item) => sum + item.quantity * item.rate * (1 - (item.discount_pct ?? 0) / 100) * (1 - (item.discount_pct_2 ?? 0) / 100), 0);
+  const vatTotal = lines.reduce((sum, item) => sum + item.quantity * item.rate * (1 - (item.discount_pct ?? 0) / 100) * (1 - (item.discount_pct_2 ?? 0) / 100) * (item.vat_rate / 100), 0);
 
   function updateLine(index: number, patch: Partial<PurchaseOrderLineDraft>) {
     setLines((current) => current.map((line, lineIndex) => (lineIndex === index ? { ...line, ...patch } : line)));
@@ -1881,7 +1883,7 @@ function POForm({
         <div className="line-editor">
           <div className="section-heading compact-heading">
             <h2>Linhas</h2>
-            <button type="button" onClick={() => setLines([...lines, { sort_order: lines.length + 1, item_ref: "", description: "", quantity: 1, unit: "un", rate: 0, discount_pct: 0, vat_rate: 23, category_id: "", expense_type: "" }])}>
+            <button type="button" onClick={() => setLines([...lines, { sort_order: lines.length + 1, item_ref: "", description: "", quantity: 1, unit: "un", rate: 0, discount_pct: 0, discount_pct_2: 0, vat_rate: 23, category_id: "", expense_type: "" }])}>
               <Plus size={16} />
               Adicionar linha
             </button>
@@ -1899,8 +1901,9 @@ function POForm({
             <span>Nº de unidades</span>
             <span>Unidade</span>
             <span>Preço unitário</span>
-            <span>Desc. %</span>
-            <span>VAT</span>
+            <span>Desc. 1 %</span>
+            <span>Desc. 2 %</span>
+            <span>IVA</span>
             <span>Total</span>
             <span />
           </div>
@@ -1943,13 +1946,14 @@ function POForm({
                 <input value={line.unit} onChange={(event) => updateLine(index, { unit: event.target.value })} />
                 <input type="number" min="0" step="1" value={line.rate} onChange={(event) => updateLine(index, { rate: Number(event.target.value) })} />
                 <input type="number" min="0" max="100" step="0.5" value={line.discount_pct ?? 0} onChange={(event) => updateLine(index, { discount_pct: Number(event.target.value) })} />
+                <input type="number" min="0" max="100" step="0.5" value={line.discount_pct_2 ?? 0} onChange={(event) => updateLine(index, { discount_pct_2: Number(event.target.value) })} />
                 <select value={line.vat_rate} onChange={(event) => updateLine(index, { vat_rate: Number(event.target.value) })}>
                   <option value={23}>IVA 23%</option>
                   <option value={13}>IVA 13%</option>
                   <option value={6}>IVA 6%</option>
                   <option value={0}>Isento</option>
                 </select>
-                <strong>{money(line.quantity * line.rate * (1 - (line.discount_pct ?? 0) / 100))}</strong>
+                <strong>{money(line.quantity * line.rate * (1 - (line.discount_pct ?? 0) / 100) * (1 - (line.discount_pct_2 ?? 0) / 100))}</strong>
                 <button type="button" className="icon-button danger" onClick={() => setLines(lines.filter((_, lineIndex) => lineIndex !== index))} title="Remover linha">
                   <Trash2 size={16} />
                 </button>
@@ -2080,7 +2084,7 @@ function PreviewModal({ po, settings, onClose, canWrite }: { po: PurchaseOrder; 
 const LINHAS_POR_PAGINA = 28; // calibrado para caber numa A4 com cabeçalho
 
 function lineNet(line: PurchaseOrderLineItem): number {
-  return line.line_total ?? line.quantity * line.rate * (1 - (line.discount_pct ?? 0) / 100);
+  return line.line_total ?? line.quantity * line.rate * (1 - (line.discount_pct ?? 0) / 100) * (1 - (line.discount_pct_2 ?? 0) / 100);
 }
 
 function PoLinesPaginated({ lines }: { lines: PurchaseOrderLineItem[] }) {
@@ -2138,7 +2142,9 @@ function PoLinesPaginated({ lines }: { lines: PurchaseOrderLineItem[] }) {
                   <td>{line.quantity}</td>
                   <td>{line.unit}</td>
                   <td>{money(line.rate)}</td>
-                  <td>{(line.discount_pct ?? 0) > 0 ? `${line.discount_pct}%` : "—"}</td>
+                  <td>{((line.discount_pct ?? 0) > 0 || (line.discount_pct_2 ?? 0) > 0)
+                    ? [line.discount_pct, line.discount_pct_2].filter((d) => (d ?? 0) > 0).map((d) => `${d}%`).join(" + ")
+                    : "—"}</td>
                   <td>{money(lineNet(line))}</td>
                 </tr>
               ))}
