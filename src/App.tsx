@@ -1886,6 +1886,11 @@ function POForm({
               Adicionar linha
             </button>
           </div>
+          <datalist id="subcategorias-list">
+            {activeCategories.map((cat) => (
+              <option value={cat.category_code ? `${cat.category_name} (${cat.category_code})` : cat.category_name} key={cat.id} />
+            ))}
+          </datalist>
           <div className="line-header" aria-hidden="true">
             <span>Ref. artigo</span>
             <span>Descrição</span>
@@ -1902,37 +1907,35 @@ function POForm({
           {lines.map((line, index) => {
             const selectedCategory = categoryById.get(line.category_id ?? "");
             const selectedExpenseType = line.expense_type || selectedCategory?.expense_type || "";
-            const subcategories = selectedExpenseType
-              ? activeCategories.filter((category) => category.expense_type === selectedExpenseType)
-              : [];
 
             return (
               <div className="line-row" key={index}>
                 <input placeholder="Ref. artigo" value={line.item_ref ?? ""} onChange={(event) => updateLine(index, { item_ref: event.target.value })} />
                 <input placeholder="Descrição" value={line.description} onChange={(event) => updateLine(index, { description: event.target.value })} />
-                <select value={selectedExpenseType} onChange={(event) => updateLine(index, { expense_type: event.target.value, category_id: "" })}>
-                  <option value="">Categoria</option>
-                  {expenseTypes.map((expenseType) => (
-                    <option value={expenseType} key={expenseType}>
-                      {expenseType}
-                    </option>
-                  ))}
-                </select>
-                <select
-                  disabled={!selectedExpenseType}
-                  value={selectedCategory?.expense_type === selectedExpenseType ? line.category_id ?? "" : ""}
+                <input
+                  className="categoria-auto"
+                  readOnly
+                  tabIndex={-1}
+                  value={selectedExpenseType}
+                  placeholder="Categoria (automática)"
+                  title="Preenchida automaticamente ao escolher a subcategoria"
+                />
+                <input
+                  list="subcategorias-list"
+                  placeholder="Procurar subcategoria…"
+                  value={selectedCategory ? (selectedCategory.category_code ? `${selectedCategory.category_name} (${selectedCategory.category_code})` : selectedCategory.category_name) : ""}
                   onChange={(event) => {
-                    const nextCategory = categoryById.get(event.target.value);
-                    updateLine(index, { category_id: event.target.value, expense_type: nextCategory?.expense_type ?? selectedExpenseType });
+                    const chosen = activeCategories.find((cat) => {
+                      const label = cat.category_code ? `${cat.category_name} (${cat.category_code})` : cat.category_name;
+                      return label === event.target.value;
+                    });
+                    if (chosen) {
+                      updateLine(index, { category_id: chosen.id, expense_type: chosen.expense_type ?? "" });
+                    } else {
+                      updateLine(index, { category_id: "" });
+                    }
                   }}
-                >
-                  <option value="">Subcategoria</option>
-                  {subcategories.map((category) => (
-                    <option value={category.id} key={category.id}>
-                      {category.category_code ? `${category.category_name} (${category.category_code})` : category.category_name}
-                    </option>
-                  ))}
-                </select>
+                />
                 <input type="number" min="0" step="1" value={line.quantity} onChange={(event) => updateLine(index, { quantity: Number(event.target.value) })} />
                 <input value={line.unit} onChange={(event) => updateLine(index, { unit: event.target.value })} />
                 <input type="number" min="0" step="1" value={line.rate} onChange={(event) => updateLine(index, { rate: Number(event.target.value) })} />
@@ -1977,9 +1980,9 @@ function POForm({
               </span>
             </label>
           </div>
-          <label>
-            Contacto na obra
-            <input value={form.site_contact} onChange={(event) => setForm({ ...form, site_contact: event.target.value })} />
+          <label className="wide">
+            Contactos na obra <small>(um por linha)</small>
+            <textarea rows={3} value={form.site_contact} onChange={(event) => setForm({ ...form, site_contact: event.target.value })} placeholder="Ex:\nJoão Silva (encarregado) - 937 128 143\nTiago Tremoço - 937 987 266" />
           </label>
           <label>
             Requisitos de veículo
@@ -2148,8 +2151,8 @@ function PurchaseOrderPreview({ po, company }: { po: PurchaseOrder; company: Rec
               <dd>{po.project?.project_name}</dd>
               <dt>Centro de custo</dt>
               <dd>{po.project?.cost_centre_code}</dd>
-              <dt>Contacto na obra</dt>
-              <dd>{po.site_contact}</dd>
+              <dt>Contactos na obra</dt>
+              <dd className="po-multiline">{po.site_contact}</dd>
               <dt>Morada</dt>
               <dd>{po.delivery_address}</dd>
             </dl>
@@ -2163,7 +2166,6 @@ function PurchaseOrderPreview({ po, company }: { po: PurchaseOrder; company: Rec
             <col className="po-line-unit" />
             <col className="po-line-rate" />
             <col className="po-line-disc" />
-            <col className="po-line-vat" />
             <col className="po-line-total" />
           </colgroup>
           <thead>
@@ -2174,8 +2176,7 @@ function PurchaseOrderPreview({ po, company }: { po: PurchaseOrder; company: Rec
               <th>Unidade</th>
               <th>Preço unitário</th>
               <th>Desc.</th>
-              <th>IVA</th>
-              <th>Total</th>
+              <th>Total líquido</th>
             </tr>
           </thead>
           <tbody>
@@ -2187,7 +2188,6 @@ function PurchaseOrderPreview({ po, company }: { po: PurchaseOrder; company: Rec
                 <td>{line.unit}</td>
                 <td>{money(line.rate)}</td>
                 <td>{(line.discount_pct ?? 0) > 0 ? `${line.discount_pct}%` : "—"}</td>
-                <td>{line.vat_rate}%</td>
                 <td>{money(line.line_total ?? line.quantity * line.rate * (1 - (line.discount_pct ?? 0) / 100))}</td>
               </tr>
             ))}
@@ -2201,18 +2201,11 @@ function PurchaseOrderPreview({ po, company }: { po: PurchaseOrder; company: Rec
             <p>{po.offloading_instructions}</p>
           </div>
           <div className="po-totals">
-            <div>
-              <span>Subtotal</span>
+            <div className="po-total-liquido">
+              <span>Total líquido</span>
               <strong>{money(po.subtotal)}</strong>
             </div>
-            <div>
-              <span>IVA aplicável</span>
-              <strong>{money(po.vat_total)}</strong>
-            </div>
-            <div>
-              <span>Total</span>
-              <strong>{money(po.grand_total)}</strong>
-            </div>
+            <p className="po-iva-note">Aos valores apresentados acresce o IVA à taxa legal em vigor.</p>
           </div>
         </section>
         {po.notes && (
@@ -2230,7 +2223,6 @@ function PurchaseOrderPreview({ po, company }: { po: PurchaseOrder; company: Rec
               ))}
             </tbody>
           </table>
-          <p className="po-vat-note">Aos valores apresentados acresce o IVA à taxa legal em vigor.</p>
         </section>
         <footer className="po-footer">
           {invoiceEmail
