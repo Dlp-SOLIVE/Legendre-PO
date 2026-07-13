@@ -1923,15 +1923,18 @@ function POForm({
                 <input
                   list="subcategorias-list"
                   placeholder="Procurar subcategoria…"
-                  value={selectedCategory ? (selectedCategory.category_code ? `${selectedCategory.category_name} (${selectedCategory.category_code})` : selectedCategory.category_name) : ""}
-                  onChange={(event) => {
+                  defaultValue={selectedCategory ? (selectedCategory.category_code ? `${selectedCategory.category_name} (${selectedCategory.category_code})` : selectedCategory.category_name) : ""}
+                  key={`sub-${index}-${line.category_id ?? "none"}`}
+                  onInput={(event) => {
+                    const typed = (event.target as HTMLInputElement).value;
                     const chosen = activeCategories.find((cat) => {
                       const label = cat.category_code ? `${cat.category_name} (${cat.category_code})` : cat.category_name;
-                      return label === event.target.value;
+                      return label === typed;
                     });
                     if (chosen) {
                       updateLine(index, { category_id: chosen.id, expense_type: chosen.expense_type ?? "" });
-                    } else {
+                    } else if (line.category_id) {
+                      // limpou/alterou o texto depois de ter escolhido — desassocia a categoria
                       updateLine(index, { category_id: "" });
                     }
                   }}
@@ -2070,6 +2073,92 @@ function PreviewModal({ po, settings, onClose, canWrite }: { po: PurchaseOrder; 
   );
 }
 
+// Linhas do documento paginadas com "A transportar" / "Transporte".
+// Divide as linhas em páginas de LINHAS_POR_PAGINA; cada página que continua
+// fecha com o subtotal acumulado ("A transportar") e a seguinte abre com o
+// mesmo valor ("Transporte"). A última página fecha com o Total líquido.
+const LINHAS_POR_PAGINA = 28; // calibrado para caber numa A4 com cabeçalho
+
+function lineNet(line: PurchaseOrderLineItem): number {
+  return line.line_total ?? line.quantity * line.rate * (1 - (line.discount_pct ?? 0) / 100);
+}
+
+function PoLinesPaginated({ lines }: { lines: PurchaseOrderLineItem[] }) {
+  // dividir em páginas
+  const pages: PurchaseOrderLineItem[][] = [];
+  for (let i = 0; i < lines.length; i += LINHAS_POR_PAGINA) {
+    pages.push(lines.slice(i, i + LINHAS_POR_PAGINA));
+  }
+  if (pages.length === 0) pages.push([]);
+
+  let acumulado = 0;
+
+  return (
+    <>
+      {pages.map((pageLines, pageIndex) => {
+        const transporte = acumulado; // o que vem de trás
+        pageLines.forEach((l) => { acumulado += lineNet(l); });
+        const isLast = pageIndex === pages.length - 1;
+        const isFirst = pageIndex === 0;
+
+        return (
+          <table className="po-lines po-lines-page" key={pageIndex}>
+            <colgroup>
+              <col className="po-line-ref" />
+              <col className="po-line-description" />
+              <col className="po-line-quantity" />
+              <col className="po-line-unit" />
+              <col className="po-line-rate" />
+              <col className="po-line-disc" />
+              <col className="po-line-total" />
+            </colgroup>
+            <thead>
+              <tr>
+                <th>Ref. artigo</th>
+                <th>Descrição</th>
+                <th>Quantidade</th>
+                <th>Unidade</th>
+                <th>Preço unitário</th>
+                <th>Desc.</th>
+                <th>Total líquido</th>
+              </tr>
+            </thead>
+            <tbody>
+              {/* "Transporte" no topo das páginas seguintes */}
+              {!isFirst && (
+                <tr className="po-transporte-row">
+                  <td colSpan={6}>Transporte</td>
+                  <td>{money(transporte)}</td>
+                </tr>
+              )}
+              {pageLines.map((line, index) => (
+                <tr key={line.id ?? index}>
+                  <td>{line.item_ref ?? "-"}</td>
+                  <td>{line.description}</td>
+                  <td>{line.quantity}</td>
+                  <td>{line.unit}</td>
+                  <td>{money(line.rate)}</td>
+                  <td>{(line.discount_pct ?? 0) > 0 ? `${line.discount_pct}%` : "—"}</td>
+                  <td>{money(lineNet(line))}</td>
+                </tr>
+              ))}
+            </tbody>
+            {/* "A transportar" no fim das páginas que continuam */}
+            {!isLast && (
+              <tfoot>
+                <tr className="po-transporte-row">
+                  <td colSpan={6}>A transportar</td>
+                  <td>{money(acumulado)}</td>
+                </tr>
+              </tfoot>
+            )}
+          </table>
+        );
+      })}
+    </>
+  );
+}
+
 function PurchaseOrderPreview({ po, company }: { po: PurchaseOrder; company: Record<string, string> }) {
   const invoiceEmail = company.accounts_email ?? "";
   // resumo por código analítico (para o rodapé do documento)
@@ -2158,41 +2247,7 @@ function PurchaseOrderPreview({ po, company }: { po: PurchaseOrder; company: Rec
             </dl>
           </div>
         </section>
-        <table className="po-lines">
-          <colgroup>
-            <col className="po-line-ref" />
-            <col className="po-line-description" />
-            <col className="po-line-quantity" />
-            <col className="po-line-unit" />
-            <col className="po-line-rate" />
-            <col className="po-line-disc" />
-            <col className="po-line-total" />
-          </colgroup>
-          <thead>
-            <tr>
-              <th>Ref. artigo</th>
-              <th>Descrição</th>
-              <th>Quantidade</th>
-              <th>Unidade</th>
-              <th>Preço unitário</th>
-              <th>Desc.</th>
-              <th>Total líquido</th>
-            </tr>
-          </thead>
-          <tbody>
-            {(po.line_items ?? []).map((line, index) => (
-              <tr key={line.id ?? index}>
-                <td>{line.item_ref ?? "-"}</td>
-                <td>{line.description}</td>
-                <td>{line.quantity}</td>
-                <td>{line.unit}</td>
-                <td>{money(line.rate)}</td>
-                <td>{(line.discount_pct ?? 0) > 0 ? `${line.discount_pct}%` : "—"}</td>
-                <td>{money(line.line_total ?? line.quantity * line.rate * (1 - (line.discount_pct ?? 0) / 100))}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <PoLinesPaginated lines={po.line_items ?? []} />
         <section className="po-bottom-grid">
           <div>
             <h3>Instruções de entrega</h3>
