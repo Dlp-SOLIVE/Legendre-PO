@@ -1,231 +1,1550 @@
-export type AppRole = "admin" | "user" | "standard" | "viewer";
-export type PurchaseOrderStatus = "draft" | "validated";
+:root {
+  color-scheme: light;
+  font-family:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: #f6f5fb;
+  color: #242329;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
 
-export type Supplier = {
-  id: string;
-  supplier_name: string;
-  account_code: string | null;
-  contact_name: string | null;
-  email: string | null;
-  phone: string | null;
-  address: string | null;
-  vat_number: string | null;
-  notes: string | null;
-  is_active: boolean;
-  created_at?: string;
-  updated_at?: string;
-};
+* {
+  box-sizing: border-box;
+}
 
-export type Project = {
-  id: string;
-  project_name: string;
-  project_code: string;
-  adj_code: string | null;
-  is_consortium?: boolean;
-  consortium_share?: number;
-  site_address: string | null;
-  cost_centre_code: string | null;
-  default_delivery_address: string | null;
-  site_contact_name: string | null;
-  site_contact_phone: string | null;
-  default_vehicle_requirements: string | null;
-  default_offloading_instructions: string | null;
-  default_delivery_instructions: string | null;
-  is_active: boolean;
-  created_at?: string;
-  updated_at?: string;
-};
+body {
+  background: #f6f5fb;
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+}
 
-export type StaffMember = {
-  id: string;
-  full_name: string;
-  initials: string | null;
-  email: string;
-  phone: string | null;
-  role: AppRole;
-  is_active: boolean;
-  authority_limit: number | null;
-  created_at?: string;
-  updated_at?: string;
-};
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
 
-export type StaffProjectAccess = {
-  id: string;
-  staff_member_id: string;
-  project_id: string;
-  created_at?: string;
-};
+button {
+  align-items: center;
+  background: #cf2f45;
+  border: 0;
+  border-radius: 6px;
+  color: #fff;
+  cursor: pointer;
+  display: inline-flex;
+  font-weight: 700;
+  gap: 8px;
+  justify-content: center;
+  min-height: 40px;
+  padding: 9px 14px;
+}
 
-export type CostCategory = {
-  id: string;
-  expense_type: string;
-  category_name: string;
-  category_code: string;
-  description: string | null;
-  is_active: boolean;
-  created_at?: string;
-  updated_at?: string;
-};
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
 
-export type AppSetting = {
-  setting_key: string;
-  setting_value: Record<string, unknown>;
-  description: string | null;
-  created_at?: string;
-  updated_at?: string;
-};
+button.secondary {
+  background: #f3f1f5;
+  color: #4f4c57;
+}
 
-export type PurchaseOrderLineItem = {
-  id?: string;
-  purchase_order_id?: string;
-  sort_order: number;
-  item_ref: string | null;
-  description: string;
-  quantity: number;
-  unit: string;
-  rate: number;
-  discount_pct: number;
-  discount_pct_2?: number;
-  vat_rate: number;
-  category_id: string | null;
-  line_total?: number;
-  line_vat?: number;
-  gross_total?: number;
-  category?: CostCategory | null;
-};
+button:hover:not(:disabled) {
+  background: #b9263a;
+}
 
-export type PurchaseOrder = {
-  id: string;
-  po_number: string;
-  project_id: string;
-  supplier_id: string;
-  requester_id: string | null;
-  category_id: string | null;
-  status: PurchaseOrderStatus;
-  po_date: string;
-  delivery_date: string | null;
-  delivery_time: string | null;
-  payment_terms: string | null;
-  invoice_project_code: string | null;
-  delivery_address: string | null;
-  supplier_contact_name: string | null;
-  supplier_email: string | null;
-  supplier_phone: string | null;
-  supplier_address: string | null;
-  site_contact: string | null;
-  vehicle_requirements: string | null;
-  offloading_instructions: string | null;
-  delivery_instructions: string | null;
-  include_driver_leaflet: boolean;
-  include_terms_conditions: boolean;
-  subtotal: number;
-  vat_total: number;
-  grand_total: number;
-  notes: string | null;
-  created_at?: string;
-  updated_at?: string;
-  supplier?: Supplier | null;
-  project?: Project | null;
-  requester?: StaffMember | null;
-  category?: CostCategory | null;
-  line_items?: PurchaseOrderLineItem[];
-};
+button.secondary:hover:not(:disabled) {
+  background: #e9e6ee;
+}
 
-export type DeliveryNoteLine = {
-  id: string;
-  delivery_note_id: string;
-  line_item_id: string;
-  quantity_received: number;
-};
+input,
+select,
+textarea {
+  background: #fff;
+  border: 1px solid #e3e1e8;
+  border-radius: 6px;
+  color: #242329;
+  min-height: 40px;
+  padding: 9px 10px;
+  width: 100%;
+}
 
-export type DeliveryNote = {
-  id: string;
-  purchase_order_id: string;
-  guia_number: string | null;
-  delivery_date: string;
-  attachment_url: string | null;
-  notes: string | null;
-  created_at?: string;
-  lines?: DeliveryNoteLine[];
-};
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: #cf2f45;
+  box-shadow: 0 0 0 3px rgba(207, 47, 69, 0.12);
+  outline: none;
+}
 
-export type SupplierInvoiceLine = {
-  id: string;
-  invoice_id: string;
-  line_item_id: string;
-  quantity_invoiced: number;
-  unit_price_invoiced: number;
-};
+textarea {
+  min-height: 88px;
+  resize: vertical;
+}
 
-export type SupplierInvoice = {
-  id: string;
-  purchase_order_id: string;
-  invoice_number: string | null;
-  invoice_date: string;
-  attachment_url: string | null;
-  notes: string | null;
-  created_at?: string;
-  lines?: SupplierInvoiceLine[];
-};
+label {
+  color: #6f6d76;
+  display: grid;
+  font-size: 0.82rem;
+  font-weight: 700;
+  gap: 6px;
+}
 
-export type LineReconciliation = {
-  line_item_id: string;
-  purchase_order_id: string;
-  project_id: string;
-  po_number: string;
-  po_date: string;
-  description: string;
-  category_id: string | null;
-  qty_ordered: number;
-  po_price: number;
-  qty_received: number;
-  qty_invoiced: number;
-  value_received: number;
-  value_invoiced: number;
-  accrual_value: number;
-  qty_outstanding: number;
-  avg_price_invoiced: number | null;
-  price_divergence: boolean;
-};
+table {
+  border-collapse: collapse;
+  min-width: 860px;
+  width: 100%;
+}
 
-export type AccrualByProjectMonth = {
-  project_id: string;
-  project_name: string;
-  month: string;
-  category_id: string | null;
-  expense_type: string | null;
-  category_name: string | null;
-  category_code: string | null;
-  value_received: number;
-  value_invoiced: number;
-  accrual_value: number;
-};
+th,
+td {
+  border-bottom: 1px solid #eceaf0;
+  padding: 12px;
+  text-align: left;
+  vertical-align: top;
+}
 
-export type ConsortiumReinvoicing = {
-  project_id: string;
-  project_name: string;
-  consortium_share: number;
-  month: string;
-  value_invoiced: number;
-  redebito: number;
-  ja_refaturado: boolean;
-  reinvoiced_at: string | null;
-  redebito_registado: number | null;
-};
+th {
+  background: #faf9fb;
+  color: #787681;
+  font-size: 0.76rem;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
 
-export type ReferenceData = {
-  suppliers: Supplier[];
-  projects: Project[];
-  staff: StaffMember[];
-  projectAccess: StaffProjectAccess[];
-  categories: CostCategory[];
-  settings: AppSetting[];
-};
+.app-shell {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  min-height: 100vh;
+}
 
-export type DashboardFilters = {
-  from: string;
-  to: string;
-  projectId: string;
-  supplierId: string;
-  status: string;
-};
+.sidebar {
+  background: #fff;
+  border-right: 1px solid #eeeaf1;
+  color: #29272e;
+  padding: 28px 18px;
+}
+
+.brand-lockup {
+  align-items: flex-start;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 28px;
+}
+
+.brand-lockup.large {
+  align-items: center;
+  margin-bottom: 22px;
+}
+
+.brand-lockup span {
+  color: #8b8791;
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
+.brand-logo {
+  display: block;
+  height: auto;
+  max-width: min(100%, 210px);
+}
+
+.brand-lockup.large .brand-logo {
+  max-width: min(100%, 260px);
+}
+
+.sidebar nav {
+  display: grid;
+  gap: 6px;
+}
+
+.nav-item {
+  background: transparent;
+  border: 1px solid transparent;
+  color: #8b8791;
+  justify-content: flex-start;
+  padding: 11px 12px;
+}
+
+.nav-item.active,
+.nav-item:hover:not(:disabled) {
+  background: #f9c8d2;
+  border-color: #f9c8d2;
+  color: #bd263d;
+}
+
+.workspace {
+  min-width: 0;
+  padding: 30px;
+}
+
+.topbar,
+.section-heading,
+.modal-actions,
+.button-row,
+.totals-strip,
+.supplier-snapshot {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+}
+
+.topbar {
+  justify-content: space-between;
+  margin-bottom: 24px;
+  min-height: 66px;
+}
+
+.topbar h1,
+.section-heading h2,
+.panel h3 {
+  margin: 0;
+}
+
+.eyebrow {
+  color: #cf2f45;
+  font-size: 0.76rem;
+  font-weight: 800;
+  letter-spacing: 0;
+  margin: 0 0 4px;
+  text-transform: uppercase;
+}
+
+.user-strip {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.role-pill {
+  border-radius: 999px;
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 800;
+  padding: 5px 9px;
+  text-transform: uppercase;
+}
+
+.role-pill.admin {
+  background: #cf2f45;
+}
+
+.role-pill.standard {
+  background: #6e6978;
+}
+
+.role-pill.user {
+  background: #6e6978;
+}
+
+.role-pill.viewer {
+  background: #8b8791;
+}
+
+.icon-button {
+  aspect-ratio: 1;
+  background: #f4f2f6;
+  color: #4c4a52;
+  min-height: 36px;
+  padding: 0;
+  width: 36px;
+}
+
+.icon-button:hover:not(:disabled) {
+  background: #ece8f0;
+}
+
+.icon-button.danger {
+  background: #ffe6e9;
+  color: #bd263d;
+}
+
+.icon-button.danger:hover:not(:disabled) {
+  background: #ffd7dc;
+}
+
+.work-section,
+.panel,
+.kpi,
+.login-panel {
+  background: #fff;
+  border: 1px solid #ebe8ef;
+  border-radius: 8px;
+  box-shadow: 0 10px 30px rgba(31, 31, 36, 0.04);
+}
+
+.work-section {
+  padding: 18px;
+}
+
+.section-heading {
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.compact-heading {
+  margin-top: 18px;
+}
+
+.table-wrap {
+  overflow-x: auto;
+}
+
+.po-list-toolbar {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(2, minmax(220px, 340px));
+  margin-bottom: 16px;
+}
+
+.actions-cell {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.editor-grid,
+.form-grid,
+.filters {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(4, minmax(160px, 1fr));
+  margin-bottom: 18px;
+}
+
+.wide {
+  grid-column: 1 / -1;
+}
+
+.notice {
+  background: #f7f1f4;
+  border: 1px solid #eed9e0;
+  border-radius: 6px;
+  color: #6b2d3b;
+  margin-bottom: 14px;
+  padding: 12px;
+}
+
+.notice.error {
+  background: #fff1ee;
+  border-color: #efc4bc;
+  color: #832018;
+}
+
+.readonly-field {
+  background: #faf9fb;
+  border: 1px solid #e6e3ea;
+  border-radius: 6px;
+  color: #242329;
+  min-height: 42px;
+  padding: 9px 10px;
+}
+
+.readonly-field strong,
+.readonly-field span {
+  display: block;
+}
+
+.readonly-field span {
+  color: #817d87;
+  font-size: 0.82rem;
+}
+
+.attachment-options {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(220px, 1fr));
+}
+
+.tick-box {
+  align-items: flex-start;
+  background: #fff;
+  border: 1px solid #ded9e3;
+  border-radius: 8px;
+  display: flex;
+  gap: 10px;
+  padding: 12px;
+}
+
+.tick-box input {
+  height: 18px;
+  margin-top: 2px;
+  width: 18px;
+}
+
+.tick-box strong,
+.tick-box small {
+  display: block;
+}
+
+.tick-box small {
+  color: #817d87;
+  font-size: 0.82rem;
+  margin-top: 3px;
+}
+
+.state-message,
+.login-screen {
+  align-items: center;
+  display: grid;
+  justify-items: center;
+  min-height: 100vh;
+  padding: 24px;
+  text-align: center;
+}
+
+.state-message.compact {
+  min-height: 320px;
+}
+
+.state-message h2 {
+  margin: 14px 0 6px;
+}
+
+.state-message p {
+  color: #77737e;
+  max-width: 620px;
+}
+
+.login-panel {
+  display: grid;
+  gap: 14px;
+  max-width: 440px;
+  padding: 26px;
+  text-align: left;
+  width: 100%;
+}
+
+.login-form {
+  display: grid;
+  gap: 14px;
+}
+
+.link-button {
+  background: transparent;
+  color: #bd263d;
+  justify-content: center;
+  padding: 4px;
+  text-decoration: underline;
+}
+
+.link-button:hover {
+  background: transparent;
+}
+
+.project-access-list {
+  border: 1px solid #e6e3ea;
+  border-radius: 8px;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(3, minmax(160px, 1fr));
+  margin: 0;
+  padding: 12px;
+}
+
+.project-access-list legend {
+  color: #77737e;
+  font-size: 0.82rem;
+  font-weight: 800;
+  padding: 0 6px;
+}
+
+.project-access-list label {
+  align-items: center;
+  color: #242329;
+  display: flex;
+  flex-direction: row;
+  font-size: 0.9rem;
+  font-weight: 700;
+  gap: 8px;
+}
+
+.project-access-list input {
+  width: auto;
+}
+
+.kpi-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(4, minmax(160px, 1fr));
+  margin: 18px 0;
+}
+
+.kpi {
+  display: grid;
+  gap: 8px;
+  padding: 18px;
+}
+
+.kpi span {
+  color: #7d7984;
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
+.kpi strong {
+  font-size: 1.55rem;
+}
+
+.dashboard-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.panel {
+  padding: 16px;
+}
+
+.bar-list,
+.compact-list {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.bar-row {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(110px, 1fr) minmax(120px, 2fr) auto;
+}
+
+.bar-row div {
+  background: #f0edf3;
+  border-radius: 999px;
+  height: 10px;
+  margin-top: 6px;
+  overflow: hidden;
+}
+
+.bar-row i {
+  background: #cf2f28;
+  display: block;
+  height: 100%;
+}
+
+.compact-list div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.muted {
+  color: #817d87;
+}
+
+.status-select {
+  min-width: 132px;
+}
+
+.status-pill {
+  background: #f4f2f6;
+  border-radius: 999px;
+  color: #605c66;
+  display: inline-flex;
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1;
+  padding: 6px 10px;
+  text-transform: capitalize;
+}
+
+.status-pill.validated {
+  background: #e6f4ec;
+  color: #16623a;
+}
+
+.supplier-snapshot {
+  background: #faf9fb;
+  border: 1px solid #ebe8ef;
+  border-radius: 8px;
+  flex-wrap: wrap;
+  margin: 4px 0 16px;
+  padding: 12px;
+}
+
+.line-editor {
+  margin-bottom: 18px;
+}
+
+.line-header,
+.line-row {
+  align-items: center;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: 28px minmax(80px, 0.7fr) minmax(160px, 2fr) minmax(125px, 1.1fr) minmax(145px, 1.5fr) 68px 68px 84px 74px 74px 80px 92px 34px;
+  margin-bottom: 8px;
+}
+
+.line-header {
+  color: #817d87;
+  font-size: 0.76rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.totals-strip {
+  background: #2a242b;
+  border-radius: 8px;
+  color: #fff;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  margin-bottom: 16px;
+  padding: 14px;
+}
+
+.totals-strip strong {
+  font-size: 1.15rem;
+}
+
+.modal-backdrop {
+  background: rgba(24, 22, 28, 0.68);
+  inset: 0;
+  overflow: auto;
+  padding: 28px;
+  position: fixed;
+  z-index: 20;
+}
+
+.modal-shell {
+  display: grid;
+  gap: 14px;
+  justify-items: center;
+}
+
+.modal-actions {
+  background: #fff;
+  border-radius: 8px;
+  justify-content: flex-end;
+  padding: 10px;
+  width: min(100%, 940px);
+}
+
+.print-area {
+  display: grid;
+  gap: 18px;
+}
+
+.po-page {
+  background: #fff;
+  color: #111;
+  min-height: 297mm;
+  padding: 14mm;
+  width: 210mm;
+}
+
+.po-header {
+  align-items: flex-start;
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.po-logo {
+  color: #cf2f28;
+  font-size: 28px;
+  font-weight: 900;
+  letter-spacing: 0;
+}
+
+.po-logo-image {
+  display: block;
+  height: auto;
+  object-fit: contain;
+  width: 180px;
+}
+
+.po-company {
+  display: grid;
+  font-size: 12px;
+  gap: 3px;
+  max-width: 280px;
+  text-align: right;
+}
+
+.po-title {
+  border-bottom: 3px solid #111;
+  border-top: 3px solid #111;
+  font-size: 23px;
+  margin: 24px 0 14px;
+  padding: 8px 0;
+  text-transform: uppercase;
+}
+
+.po-meta-grid,
+.po-info-grid,
+.po-bottom-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.po-meta-grid {
+  grid-template-columns: minmax(42mm, 1.45fr) repeat(3, 1fr);
+}
+
+.po-meta-grid div,
+.po-info-grid > div {
+  border: 1px solid #111;
+  padding: 8px;
+}
+
+.po-meta-grid span {
+  display: block;
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.po-meta-grid em {
+  display: block;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 700;
+  margin-top: 2px;
+}
+
+.po-number-cell strong {
+  display: block;
+  font-size: 12px;
+  line-height: 1.15;
+  white-space: nowrap;
+}
+
+.po-info-grid,
+.po-bottom-grid {
+  grid-template-columns: 1fr 1fr;
+  margin-top: 14px;
+}
+
+.po-info-grid h3,
+.po-bottom-grid h3 {
+  background: #111;
+  color: #fff;
+  font-size: 11px;
+  margin: -8px -8px 8px;
+  padding: 6px 8px;
+  text-transform: uppercase;
+}
+
+.po-info-grid dl {
+  display: grid;
+  font-size: 11px;
+  gap: 5px 10px;
+  grid-template-columns: 88px 1fr;
+  margin: 0;
+}
+
+.po-info-grid dt {
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.po-info-grid dd {
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.po-lines {
+  font-size: 11px;
+  margin-top: 16px;
+  min-width: 0;
+}
+
+.po-line-ref {
+  width: 12%;
+}
+
+.po-line-description {
+  width: 40%;
+}
+
+.po-line-quantity {
+  width: 9%;
+}
+
+.po-line-unit {
+  width: 9%;
+}
+
+.po-line-rate,
+.po-line-vat,
+.po-line-total {
+  width: 10%;
+}
+
+.po-lines th {
+  background: #111;
+  color: #fff;
+}
+
+.po-lines th,
+.po-lines td {
+  border: 1px solid #111;
+  padding: 6px;
+}
+
+.po-bottom-grid p {
+  font-size: 11px;
+  margin: 0 0 8px;
+}
+
+.po-notes-block {
+  border: 1px solid #111;
+  margin-top: 10px;
+  padding: 8px;
+}
+
+.po-notes-block h3 {
+  background: #111;
+  color: #fff;
+  font-size: 11px;
+  margin: -8px -8px 7px;
+  padding: 6px 8px;
+  text-transform: uppercase;
+}
+
+.po-notes-block p {
+  font-size: 11px;
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.po-totals {
+  border: 1px solid #111;
+  align-self: start;
+}
+
+.po-totals div {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px;
+}
+
+.po-totals div + div {
+  border-top: 1px solid #111;
+}
+
+.po-totals div:last-child {
+  background: #111;
+  color: #fff;
+}
+
+.po-footer {
+  border-top: 1px solid #111;
+  font-size: 10px;
+  line-height: 1.45;
+  margin-top: 24px;
+  padding-top: 8px;
+}
+
+.driver-page h2 {
+  border-bottom: 2px solid #111;
+  margin-top: 0;
+  padding-bottom: 8px;
+}
+
+.driver-page ul {
+  columns: 1;
+  font-size: 11px;
+  line-height: 1.35;
+  margin: 10px 0 0;
+  padding-left: 18px;
+}
+
+.driver-page li {
+  margin-bottom: 6px;
+}
+
+.driver-lead {
+  font-weight: 800;
+}
+
+.terms-page {
+  padding: 0;
+}
+
+.terms-page img {
+  display: block;
+  height: 100%;
+  object-fit: contain;
+  width: 100%;
+}
+
+.export-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(3, minmax(180px, 1fr));
+}
+
+.export-button {
+  align-items: flex-start;
+  background: #fff;
+  border: 1px solid #ebe8ef;
+  color: #242329;
+  display: grid;
+  justify-items: start;
+  min-height: 116px;
+  padding: 18px;
+}
+
+.export-button svg {
+  color: #cf2f28;
+}
+
+.export-button span {
+  font-weight: 800;
+}
+
+.export-button small {
+  color: #817d87;
+}
+
+@media (max-width: 1100px) {
+  .app-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar {
+    position: static;
+  }
+
+  .sidebar nav {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .editor-grid,
+  .form-grid,
+  .po-list-toolbar,
+  .filters,
+  .kpi-grid,
+  .dashboard-grid,
+  .export-grid,
+  .project-access-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .line-header {
+    display: none;
+  }
+
+  .line-row {
+    grid-template-columns: 1fr 100px 100px;
+  }
+}
+
+@media (max-width: 720px) {
+  .workspace {
+    padding: 14px;
+  }
+
+  .topbar,
+  .section-heading,
+  .compact-list div {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .sidebar nav,
+  .editor-grid,
+  .form-grid,
+  .po-list-toolbar,
+  .filters,
+  .kpi-grid,
+  .dashboard-grid,
+  .export-grid,
+  .project-access-list {
+    grid-template-columns: 1fr;
+  }
+
+  .line-row {
+    grid-template-columns: 1fr;
+  }
+
+  .attachment-options {
+    grid-template-columns: 1fr;
+  }
+
+  .modal-backdrop {
+    padding: 0;
+  }
+
+  .po-page {
+    transform-origin: top left;
+    width: 100%;
+  }
+}
+
+@media print {
+  @page {
+    margin: 0;
+    size: A4;
+  }
+
+  html,
+  body,
+  #root {
+    background: #fff;
+    height: auto;
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 210mm;
+  }
+
+  body {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  body > * {
+    display: none !important;
+  }
+
+  #root {
+    display: block !important;
+  }
+
+  .state-message,
+  .login-screen {
+    display: none !important;
+  }
+
+  .app-shell,
+  .workspace {
+    background: #fff !important;
+    display: block !important;
+    margin: 0 !important;
+    min-height: 0 !important;
+    padding: 0 !important;
+  }
+
+  .sidebar,
+  .topbar,
+  .workspace > :not(.modal-backdrop) {
+    display: none !important;
+  }
+
+  .modal-backdrop {
+    background: #fff !important;
+    display: block !important;
+    inset: 0 !important;
+    margin: 0 !important;
+    overflow: visible !important;
+    padding: 0 !important;
+    position: static !important;
+  }
+
+  .modal-shell {
+    background: #fff !important;
+    display: block !important;
+    inset: auto !important;
+    margin: 0 !important;
+    overflow: visible !important;
+    padding: 0 !important;
+    position: static !important;
+  }
+
+  .print-area {
+    background: #fff !important;
+    box-sizing: border-box !important;
+    display: block !important;
+    gap: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    position: static !important;
+    width: 210mm;
+  }
+
+  .print-area * {
+    box-sizing: border-box !important;
+  }
+
+  .modal-actions {
+    display: none !important;
+  }
+
+  .po-page {
+    box-shadow: none;
+    margin: 0 !important;
+    min-height: 0;
+    padding: 9mm 10mm;
+    width: 210mm;
+  }
+
+  /* A página principal (com a tabela de linhas) FLUI e pagina naturalmente.
+     Já não tem altura fixa nem overflow hidden — era isso que cortava as
+     linhas que passavam da primeira A4. */
+  .po-order-page {
+    height: auto;
+    max-height: none;
+    overflow: visible;
+  }
+
+  /* Só as páginas fixas (cláusulas) forçam quebra a seguir. */
+  .clausulas-page {
+    page-break-before: always;
+  }
+
+  /* A tabela de linhas pode quebrar entre páginas; o cabeçalho repete-se
+     no topo de cada página impressa. */
+  .po-lines {
+    page-break-inside: auto;
+  }
+  .po-lines thead {
+    display: table-header-group; /* repete o cabeçalho em cada página */
+  }
+  .po-lines tr {
+    page-break-inside: avoid; /* uma linha não parte a meio */
+  }
+  .po-lines tfoot {
+    display: table-footer-group;
+  }
+
+  .po-order-page {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .terms-page {
+    padding: 0;
+  }
+
+  .po-header {
+    gap: 12px;
+  }
+
+  .po-logo {
+    font-size: 22px;
+  }
+
+  .po-logo-image {
+    width: 160px;
+  }
+
+  .po-company {
+    font-size: 9px;
+    gap: 2px;
+    max-width: 250px;
+  }
+
+  .po-title {
+    font-size: 18px;
+    margin: 12px 0 8px;
+    padding: 5px 0;
+  }
+
+  .po-meta-grid {
+    gap: 6px;
+    grid-template-columns: minmax(44mm, 1.5fr) repeat(3, 1fr);
+  }
+
+  .po-meta-grid div,
+  .po-info-grid > div {
+    padding: 5px;
+  }
+
+  .po-meta-grid span {
+    font-size: 8px;
+  }
+
+  .po-meta-grid strong {
+    font-size: 10px;
+  }
+
+  .po-number-cell strong {
+    font-size: 8.5px;
+    line-height: 1.1;
+  }
+
+  .po-meta-grid em {
+    font-size: 9px;
+    margin-top: 1px;
+  }
+
+  .po-info-grid,
+  .po-bottom-grid {
+    gap: 7px;
+    margin-top: 8px;
+  }
+
+  .po-info-grid h3,
+  .po-bottom-grid h3 {
+    font-size: 9px;
+    margin: -5px -5px 5px;
+    padding: 4px 5px;
+  }
+
+  .po-info-grid dl {
+    font-size: 9px;
+    gap: 3px 6px;
+    grid-template-columns: 70px 1fr;
+  }
+
+  .po-lines {
+    font-size: 9px;
+    margin-top: 8px;
+  }
+
+  .po-lines th,
+  .po-lines td {
+    padding: 4px;
+  }
+
+  .po-bottom-grid p {
+    font-size: 9px;
+    line-height: 1.28;
+    margin: 0 0 5px;
+  }
+
+  .po-notes-block {
+    margin-top: 7px;
+    padding: 5px;
+  }
+
+  .po-notes-block h3 {
+    font-size: 9px;
+    margin: -5px -5px 5px;
+    padding: 4px 5px;
+  }
+
+  .po-notes-block p {
+    font-size: 9px;
+    line-height: 1.28;
+  }
+
+  .po-totals div {
+    font-size: 10px;
+    padding: 5px;
+  }
+
+  .po-footer {
+    font-size: 8px;
+    line-height: 1.3;
+    margin-top: auto;
+    padding-top: 5px;
+  }
+
+  .driver-page h2 {
+    font-size: 16px;
+    margin-bottom: 8px;
+    padding-bottom: 6px;
+  }
+
+  .driver-page ul {
+    font-size: 9.2px;
+    line-height: 1.24;
+    margin-top: 6px;
+  }
+
+  .driver-page li {
+    margin-bottom: 4px;
+  }
+}
+
+/* ─── Lote 3B: reconciliação (guias, faturas, accrual) ─── */
+.recon-wrap {
+  margin-top: 24px;
+  border-top: 2px solid #e2e8f1;
+  padding-top: 8px;
+}
+.recon-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  margin: 10px 0;
+}
+.recon-table th,
+.recon-table td {
+  border: 1px solid #e2e8f1;
+  padding: 6px 9px;
+  text-align: left;
+}
+.recon-table th {
+  background: #f4f6f9;
+  font-weight: 600;
+  color: #143a67;
+}
+.recon-table td.num,
+.recon-table th.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.recon-table td.accrual {
+  font-weight: 600;
+  color: #c0392b;
+}
+.recon-table tfoot td {
+  background: #f9fafc;
+}
+.recon-table input {
+  width: 90px;
+  text-align: right;
+  padding: 3px 6px;
+}
+.flag-warn {
+  color: #bf8f00;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+.doc-list {
+  list-style: none;
+  padding: 0;
+  margin: 6px 0;
+}
+.doc-list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 7px 10px;
+  border: 1px solid #e2e8f1;
+  border-radius: 8px;
+  margin-bottom: 6px;
+  font-size: 13px;
+}
+.sub-block {
+  margin-top: 18px;
+}
+.sub-block h4 {
+  font-size: 14px;
+  color: #143a67;
+  margin-bottom: 6px;
+}
+.doc-form {
+  margin: 14px 0;
+  padding: 16px;
+  border: 1px solid #d7e0ec;
+  border-radius: 12px;
+  background: #f9fbfd;
+}
+.doc-form h4 {
+  margin-bottom: 12px;
+  color: #143a67;
+}
+
+@media print {
+  .no-print,
+  .recon-wrap {
+    display: none !important;
+  }
+}
+
+/* ─── Lote 3C: documento — código analítico, cláusulas, assinaturas ─── */
+.po-line-disc { width: 7%; }
+.po-analytic-footer {
+  margin-top: 18px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 20px;
+}
+.po-analytic-table {
+  border-collapse: collapse;
+  font-size: 11px;
+  min-width: 260px;
+}
+.po-analytic-table th,
+.po-analytic-table td {
+  border: 1px solid #111;
+  padding: 4px 8px;
+  text-align: left;
+}
+.po-analytic-table th { background: #111; color: #fff; }
+.po-analytic-table td:last-child,
+.po-analytic-table th:last-child { text-align: right; }
+.po-vat-note { font-size: 11px; font-style: italic; color: #444; }
+
+.clausulas-page { padding: 20mm 18mm; }
+.po-clausulas-header {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  margin-bottom: 20px;
+  border-bottom: 1px solid #ccc;
+  padding-bottom: 12px;
+}
+.po-clausulas-header .po-company { display: flex; flex-direction: column; font-size: 11px; }
+.po-clausulas-header .po-company strong { font-size: 13px; }
+.po-clausulas {
+  font-size: 10.5px;
+  line-height: 1.5;
+  color: #1a1a1a;
+  padding-left: 18px;
+}
+.po-clausulas li { margin-bottom: 8px; text-align: justify; }
+.po-signatures {
+  display: flex;
+  justify-content: space-between;
+  gap: 60px;
+  margin-top: 60px;
+}
+.po-sign-block { flex: 1; }
+.po-sign-label { font-size: 11px; font-weight: 600; }
+.po-sign-line {
+  margin-top: 50px;
+  border-top: 1px solid #333;
+  width: 100%;
+}
+
+/* ─── Lote 3D: separador de accruals ─── */
+.accrual-filters {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin: 16px 0;
+}
+.accrual-filters label {
+  display: flex;
+  flex-direction: column;
+  font-size: 12px;
+  font-weight: 600;
+  color: #4a5568;
+  gap: 4px;
+}
+.accrual-filters select {
+  padding: 8px 10px;
+  border: 1px solid #d7dde5;
+  border-radius: 8px;
+  min-width: 180px;
+}
+.accrual-kpis {
+  display: flex;
+  gap: 14px;
+  margin: 16px 0;
+  flex-wrap: wrap;
+}
+.accrual-kpis .kpi-card {
+  flex: 1;
+  min-width: 160px;
+  border: 1px solid #e2e8f1;
+  border-radius: 12px;
+  padding: 14px 18px;
+  background: #f9fafc;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.accrual-kpis .kpi-card span {
+  font-size: 12px;
+  color: #6b7a8c;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+.accrual-kpis .kpi-card strong {
+  font-size: 22px;
+  color: #143a67;
+}
+.accrual-kpis .kpi-card.accrual strong { color: #c0392b; }
+
+/* Lote 3E: ações de anexo nas listas */
+.doc-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+.doc-form input[type="file"] {
+  font-size: 12px;
+  padding: 6px 0;
+}
+
+/* Lote 4: refaturação — badges de estado */
+.badge-done {
+  background: #e3f4e8;
+  color: #1a7f3c;
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 20px;
+}
+.badge-pending {
+  background: #fff3e0;
+  color: #b06f00;
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 20px;
+}
+
+/* Total líquido + nota IVA no documento (sem coluna IVA) */
+.po-total-liquido {
+  display: flex;
+  justify-content: space-between;
+  font-size: 15px;
+  font-weight: 700;
+  border-top: 2px solid #111;
+  padding-top: 8px;
+}
+.po-iva-note {
+  font-size: 10.5px;
+  font-style: italic;
+  color: #444;
+  margin-top: 4px;
+  text-align: right;
+}
+
+/* Múltiplos contactos na obra (preserva quebras de linha) */
+.po-multiline {
+  white-space: pre-line;
+}
+
+/* Categoria preenchida automaticamente (read-only) ao escolher subcategoria */
+.categoria-auto {
+  background: #f4f6f9;
+  color: #55627a;
+  cursor: default;
+}
+
+/* "A transportar" / "Transporte" — linhas de continuidade entre páginas */
+.po-transporte-row td {
+  font-weight: 700;
+  background: #f4f4f4;
+  font-style: italic;
+}
+.po-transporte-row td:last-child {
+  text-align: right;
+}
+
+/* Cada página de linhas começa numa folha nova na impressão (menos a 1ª) */
+@media print {
+  .po-lines-page {
+    page-break-inside: auto;
+  }
+  .po-lines-page + .po-lines-page {
+    page-break-before: always;
+  }
+}
+
+/* Batch apply — aplicar campo a várias linhas */
+.batch-apply {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  background: #eef4fb;
+  border: 1px solid #cfe0f2;
+  border-radius: 10px;
+  padding: 10px 14px;
+  margin-bottom: 12px;
+  font-size: 13px;
+}
+.batch-apply .batch-count {
+  font-weight: 600;
+  color: #143a67;
+}
+.batch-apply select,
+.batch-apply input {
+  padding: 6px 8px;
+  border: 1px solid #d7dde5;
+  border-radius: 7px;
+  font-size: 13px;
+}
+.line-select {
+  justify-self: center;
+}
+.line-row-selected {
+  background: #f0f6fd;
+  border-radius: 8px;
+}
