@@ -1068,21 +1068,39 @@ th {
 
   .po-page {
     box-shadow: none;
-    break-after: auto;
-    height: 297mm;
     margin: 0 !important;
-    max-height: 297mm;
     min-height: 0;
-    overflow: hidden;
     padding: 9mm 10mm;
-    page-break-after: auto;
-    page-break-inside: avoid;
     width: 210mm;
   }
 
-  .po-page:not(:last-child) {
-    break-after: page;
-    page-break-after: always;
+  /* A página principal (com a tabela de linhas) FLUI e pagina naturalmente.
+     Já não tem altura fixa nem overflow hidden — era isso que cortava as
+     linhas que passavam da primeira A4. */
+  .po-order-page {
+    height: auto;
+    max-height: none;
+    overflow: visible;
+  }
+
+  /* Só as páginas fixas (cláusulas) forçam quebra a seguir. */
+  .clausulas-page {
+    page-break-before: always;
+  }
+
+  /* A tabela de linhas pode quebrar entre páginas; o cabeçalho repete-se
+     no topo de cada página impressa. */
+  .po-lines {
+    page-break-inside: auto;
+  }
+  .po-lines thead {
+    display: table-header-group; /* repete o cabeçalho em cada página */
+  }
+  .po-lines tr {
+    page-break-inside: avoid; /* uma linha não parte a meio */
+  }
+  .po-lines tfoot {
+    display: table-footer-group;
   }
 
   .po-order-page {
