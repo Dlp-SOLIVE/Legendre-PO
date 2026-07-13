@@ -85,6 +85,7 @@ export type PurchaseOrderLineItem = {
   unit: string;
   rate: number;
   discount_pct: number;
+  discount_pct_2?: number;
   vat_rate: number;
   category_id: string | null;
   line_total?: number;
