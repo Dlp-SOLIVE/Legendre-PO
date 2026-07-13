@@ -1496,3 +1496,23 @@ th {
   color: #55627a;
   cursor: default;
 }
+
+/* "A transportar" / "Transporte" — linhas de continuidade entre páginas */
+.po-transporte-row td {
+  font-weight: 700;
+  background: #f4f4f4;
+  font-style: italic;
+}
+.po-transporte-row td:last-child {
+  text-align: right;
+}
+
+/* Cada página de linhas começa numa folha nova na impressão (menos a 1ª) */
+@media print {
+  .po-lines-page {
+    page-break-inside: auto;
+  }
+  .po-lines-page + .po-lines-page {
+    page-break-before: always;
+  }
+}
