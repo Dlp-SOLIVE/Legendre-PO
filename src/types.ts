@@ -45,6 +45,7 @@ export type StaffMember = {
   role: AppRole;
   is_active: boolean;
   authority_limit: number | null;
+  signature_url?: string | null;
   created_at?: string;
   updated_at?: string;
 };
@@ -100,6 +101,9 @@ export type PurchaseOrder = {
   project_id: string;
   supplier_id: string;
   requester_id: string | null;
+  validated_by?: string | null;
+  validated_at?: string | null;
+  validator?: { full_name: string; signature_url?: string | null } | null;
   category_id: string | null;
   status: PurchaseOrderStatus;
   po_date: string;
