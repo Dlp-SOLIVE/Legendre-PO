@@ -38,6 +38,8 @@ import {
   roleCanAdmin,
   roleCanWritePo,
   saveStaffMember,
+  uploadAssinatura,
+  getAssinaturaUrl,
   updateOwnStaffProfile,
   updatePurchaseOrder,
   validatePurchaseOrder,
@@ -996,6 +998,8 @@ function StaffAdminView({
 }) {
   const [editing, setEditing] = useState<Partial<StaffMember> | null>(null);
   const [selectedProjects, setSelectedProjects] = useState<string[]>([]);
+  const [assinaturaFile, setAssinaturaFile] = useState<File | null>(null);
+  const [assinaturaPreviewUrl, setAssinaturaPreviewUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const visibleStaff = canAdmin ? references.staff : currentStaff ? [currentStaff] : [];
 
@@ -1049,7 +1053,12 @@ function StaffAdminView({
                 : 0),
         };
 
-        await saveStaffMember(payload, role === "admin" ? [] : selectedProjects);
+        const savedId = await saveStaffMember(payload, role === "admin" ? [] : selectedProjects);
+        // se foi escolhida uma nova imagem de assinatura, faz o upload e grava o caminho
+        if (assinaturaFile && savedId) {
+          const path = await uploadAssinatura(assinaturaFile, savedId);
+          await saveStaffMember({ id: savedId, signature_url: path }, []);
+        }
       } else {
         await updateOwnStaffProfile({
           full_name: String(form.get("full_name") ?? "").trim(),
@@ -1123,6 +1132,14 @@ function StaffAdminView({
                   placeholder="Valor máximo que pode validar"
                   defaultValue={editing.authority_limit ?? ""} />
                 <small className="field-hint">Deixe vazio apenas para administradores (validam qualquer valor).</small>
+              </label>
+              <label className="wide">
+                Assinatura + carimbo (para o documento, quando este membro valida)
+                <input type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => setAssinaturaFile(event.target.files?.[0] ?? null)} />
+                <small className="field-hint">PNG ou JPG, fundo transparente de preferência. Aparece no "Pela LEGDR" do documento impresso.</small>
+                {editing.signature_url && !assinaturaFile && (
+                  <span className="assinatura-status">Já tem uma assinatura carregada.</span>
+                )}
               </label>
               <label>
                 Acesso ativo
@@ -2227,6 +2244,16 @@ function PoLinesPaginated({ lines }: { lines: PurchaseOrderLineItem[] }) {
 
 function PurchaseOrderPreview({ po, company }: { po: PurchaseOrder; company: Record<string, string> }) {
   const invoiceEmail = company.accounts_email ?? "";
+  // assinatura pré-carregada de quem validou (imagem privada — precisa de link temporário)
+  const [assinaturaUrl, setAssinaturaUrl] = useState<string | null>(null);
+  useEffect(() => {
+    const path = po.validator?.signature_url;
+    if (!path) {
+      setAssinaturaUrl(null);
+      return;
+    }
+    getAssinaturaUrl(path).then(setAssinaturaUrl).catch(() => setAssinaturaUrl(null));
+  }, [po.validator?.signature_url]);
   // resumo por código analítico (para o rodapé do documento)
   const analyticSummary = (() => {
     const map = new Map<string, number>();
@@ -2369,7 +2396,14 @@ function PurchaseOrderPreview({ po, company }: { po: PurchaseOrder; company: Rec
           <div className="po-signatures">
             <div className="po-sign-block">
               <span className="po-sign-label">Pela LEGDR</span>
-              <div className="po-sign-line" />
+              {assinaturaUrl ? (
+                <>
+                  <img className="po-sign-image" src={assinaturaUrl} alt="Assinatura e carimbo" />
+                  <span className="po-sign-name">{po.validator?.full_name}</span>
+                </>
+              ) : (
+                <div className="po-sign-line" />
+              )}
             </div>
             <div className="po-sign-block">
               <span className="po-sign-label">Pelo FORNECEDOR</span>
