@@ -1548,3 +1548,21 @@ th {
   background: #f0f6fd;
   border-radius: 8px;
 }
+
+/* Assinatura pré-carregada no "Pela LEGDR" */
+.po-sign-image {
+  max-height: 60px;
+  max-width: 180px;
+  object-fit: contain;
+  margin: 4px 0;
+}
+.po-sign-name {
+  font-size: 11px;
+  color: #444;
+  font-style: italic;
+}
+.assinatura-status {
+  font-size: 12px;
+  color: #1a7f3c;
+  font-weight: 600;
+}
