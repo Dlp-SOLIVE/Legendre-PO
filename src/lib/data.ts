@@ -89,6 +89,7 @@ export async function loadPurchaseOrders(): Promise<PurchaseOrder[]> {
     supplier: supplierById.get(po.supplier_id) ?? null,
     project: projectById.get(po.project_id) ?? null,
     requester: po.requester_id ? staffById.get(po.requester_id) ?? null : null,
+    validator: po.validated_by ? staffById.get(po.validated_by) ?? null : null,
     category: po.category_id ? categoryById.get(po.category_id) ?? null : null,
     line_items: [...(lineItemsByPurchaseOrderId.get(po.id) ?? [])].sort((a, b) => a.sort_order - b.sort_order),
   }));
@@ -143,6 +144,8 @@ export async function saveStaffMember(payload: Partial<StaffMember>, projectIds:
     const { error } = await client.from("staff_project_access").insert(rows);
     if (error) throw error;
   }
+
+  return staffId;
 }
 
 export async function updateOwnStaffProfile(payload: Pick<StaffMember, "full_name" | "initials" | "phone">) {
@@ -536,4 +539,42 @@ export async function unmarkReinvoiced(projectId: string, month: string) {
     .eq("project_id", projectId)
     .eq("month", month);
   if (error) throw error;
+}
+
+// ─────────────────────────────────────────────
+// LOTE 7 — Assinatura pré-carregada (Storage privado, bucket 'assinaturas')
+// ─────────────────────────────────────────────
+
+const ASSINATURAS_BUCKET = "assinaturas";
+const ASSINATURA_MAX_BYTES = 3 * 1024 * 1024; // 3 MB
+const ASSINATURA_TIPOS_OK = ["image/png", "image/jpeg", "image/webp"];
+
+// Upload da imagem de assinatura+carimbo de um membro da equipa.
+export async function uploadAssinatura(file: File, staffId: string): Promise<string> {
+  const client = requireClient();
+  if (file.size > ASSINATURA_MAX_BYTES) {
+    throw new Error("A imagem é demasiado grande (máx. 3 MB).");
+  }
+  if (file.type && !ASSINATURA_TIPOS_OK.includes(file.type)) {
+    throw new Error("Tipo de ficheiro não suportado. Use PNG, JPG ou WEBP.");
+  }
+  const ext = file.name.includes(".") ? file.name.split(".").pop() : "png";
+  const path = `${staffId}/assinatura-${Date.now()}.${ext}`;
+  const { error } = await client.storage.from(ASSINATURAS_BUCKET).upload(path, file, {
+    cacheControl: "3600",
+    upsert: true,
+  });
+  if (error) throw error;
+  return path;
+}
+
+// Link temporário para mostrar a assinatura (privado).
+export async function getAssinaturaUrl(path: string): Promise<string | null> {
+  if (!path) return null;
+  const client = requireClient();
+  const { data, error } = await client.storage
+    .from(ASSINATURAS_BUCKET)
+    .createSignedUrl(path, 60 * 60); // válido 1 hora — usado ao imprimir o documento
+  if (error) throw error;
+  return data?.signedUrl ?? null;
 }
