@@ -1566,3 +1566,35 @@ th {
   color: #1a7f3c;
   font-weight: 600;
 }
+
+/* Fluxo de aprovação */
+.approval-modal { max-width: 480px; }
+.approval-modal label { display: flex; flex-direction: column; gap: 6px; margin: 14px 0; font-weight: 600; font-size: 13px; }
+.approval-modal select { padding: 8px 10px; border: 1px solid #d7dde5; border-radius: 8px; font-size: 14px; }
+.approval-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.approve-btn, .return-btn, .reject-btn {
+  padding: 5px 12px; border-radius: 7px; font-size: 12.5px; font-weight: 600; cursor: pointer; border: 1px solid transparent;
+}
+.approve-btn { background: #e3f4e8; color: #1a7f3c; border-color: #b6e2c4; }
+.return-btn { background: #fff3e0; color: #b06f00; border-color: #f0d9ac; }
+.reject-btn { background: #fdecea; color: #c0392b; border-color: #f3c0ba; }
+.approve-btn:hover { background: #d0edd9; }
+.return-btn:hover { background: #ffe9cc; }
+.reject-btn:hover { background: #fbdcd8; }
+
+/* Nota de devolução/rejeição na lista de adjudicações */
+.devolucao-nota {
+  display: block;
+  font-size: 11px;
+  color: #b06f00;
+  margin-top: 4px;
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.devolucao-nota.rejeitada { color: #c0392b; }
+
+/* Estados novos nas pills */
+.status-pill.pending_approval { background: #fff3e0; color: #b06f00; }
+.status-pill.rejected { background: #fdecea; color: #c0392b; }
