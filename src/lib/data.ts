@@ -578,3 +578,21 @@ export async function getAssinaturaUrl(path: string): Promise<string | null> {
   if (error) throw error;
   return data?.signedUrl ?? null;
 }
+
+// ─────────────────────────────────────────────
+// LOTE 8 — Fluxo de aprovação por limite
+// ─────────────────────────────────────────────
+
+// Submeter uma adjudicação para aprovação de outro membro (com maior limite + acesso à obra).
+export async function submitForApproval(poId: string, approverId: string): Promise<void> {
+  const client = requireClient();
+  const { error } = await client.rpc("submit_for_approval", { po_id: poId, p_approver_id: approverId });
+  if (error) throw error;
+}
+
+// Decisão do aprovador: 'approve' | 'return' | 'reject'. Comentário obrigatório em return/reject.
+export async function decideApproval(poId: string, action: "approve" | "return" | "reject", comment?: string): Promise<void> {
+  const client = requireClient();
+  const { error } = await client.rpc("decide_approval", { po_id: poId, action, p_comment: comment ?? null });
+  if (error) throw error;
+}
