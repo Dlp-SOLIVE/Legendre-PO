@@ -1,5 +1,5 @@
 export type AppRole = "admin" | "user" | "standard" | "viewer";
-export type PurchaseOrderStatus = "draft" | "validated";
+export type PurchaseOrderStatus = "draft" | "validated" | "pending_approval" | "rejected";
 
 export type Supplier = {
   id: string;
@@ -103,6 +103,9 @@ export type PurchaseOrder = {
   requester_id: string | null;
   validated_by?: string | null;
   validated_at?: string | null;
+  approver_id?: string | null;
+  approval_comment?: string | null;
+  submitted_for_approval_at?: string | null;
   validator?: { full_name: string; signature_url?: string | null } | null;
   category_id: string | null;
   status: PurchaseOrderStatus;
