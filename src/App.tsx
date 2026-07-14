@@ -26,6 +26,7 @@ import {
   X,
   TrendingUp,
   Repeat,
+  CheckCircle2,
 } from "lucide-react";
 import {
   createPurchaseOrder,
@@ -43,6 +44,8 @@ import {
   updateOwnStaffProfile,
   updatePurchaseOrder,
   validatePurchaseOrder,
+  submitForApproval,
+  decideApproval,
   upsertCategory,
   upsertProject,
   upsertSetting,
@@ -75,6 +78,7 @@ type ViewKey =
   | "purchase-orders"
   | "accruals"
   | "reinvoicing"
+  | "approvals"
   | "new-po"
   | "suppliers"
   | "projects"
@@ -100,7 +104,16 @@ const emptyReferences: ReferenceData = {
 };
 
 const VAT_RATES = [23, 13, 6, 0];
-const statuses: PurchaseOrderStatus[] = ["draft", "validated"];
+const statuses: PurchaseOrderStatus[] = ["draft", "pending_approval", "validated", "rejected"];
+
+function statusLabel(status: PurchaseOrderStatus): string {
+  switch (status) {
+    case "validated": return "Validada";
+    case "pending_approval": return "A aguardar aprovação";
+    case "rejected": return "Rejeitada";
+    default: return "Rascunho";
+  }
+}
 
 export function App() {
   const [session, setSession] = useState<Session | null>(null);
@@ -143,6 +156,8 @@ function ProcurementShell({ session }: { session: Session }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [editingPurchaseOrder, setEditingPurchaseOrder] = useState<PurchaseOrder | null>(null);
+  const [approvalPo, setApprovalPo] = useState<PurchaseOrder | null>(null); // ADJ a submeter para aprovação
+  const [chosenApprover, setChosenApprover] = useState("");
   const [previewPurchaseOrder, setPreviewPurchaseOrder] = useState<PurchaseOrder | null>(null);
 
   const currentStaff = useMemo(() => {
@@ -187,13 +202,11 @@ function ProcurementShell({ session }: { session: Session }) {
   async function handleValidatePurchaseOrder(po: PurchaseOrder) {
     if (po.status !== "draft") return;
 
-    // Aviso prévio no ecrã (a base de dados impõe na mesma o limite)
+    // Se o valor excede o limite de quem valida, oferecer submeter para aprovação
     const meuLimite = currentStaff?.authority_limit ?? null;
     const souAdmin = normalizeRole(currentStaff?.role ?? "viewer") === "admin";
     if (!souAdmin && meuLimite !== null && po.grand_total > meuLimite) {
-      setError(
-        `Não pode validar esta adjudicação: o valor (${money(po.grand_total)}) excede o seu limite de autoridade (${money(meuLimite)}).`,
-      );
+      setApprovalPo(po); // abre o modal para escolher o aprovador
       return;
     }
 
@@ -206,6 +219,57 @@ function ProcurementShell({ session }: { session: Session }) {
       await refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Não foi possível validar a adjudicação.");
+    }
+  }
+
+  // Lista de aprovadores possíveis: limite suficiente (ou admin) E acesso à obra
+  function possibleApprovers(po: PurchaseOrder) {
+    return references.staff.filter((m) => {
+      if (!m.is_active) return false;
+      if (m.id === currentStaff?.id) return false; // não a si próprio
+      const isAdmin = normalizeRole(m.role) === "admin";
+      const hasLimit = isAdmin || (m.authority_limit != null && m.authority_limit >= po.grand_total);
+      if (!hasLimit) return false;
+      const hasAccess = isAdmin || references.projectAccess.some(
+        (pa) => pa.staff_member_id === m.id && pa.project_id === po.project_id,
+      );
+      return hasAccess;
+    });
+  }
+
+  async function handleSubmitForApproval() {
+    if (!approvalPo || !chosenApprover) return;
+    setError(null);
+    try {
+      await submitForApproval(approvalPo.id, chosenApprover);
+      setApprovalPo(null);
+      setChosenApprover("");
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Não foi possível submeter para aprovação.");
+    }
+  }
+
+  async function handleDecideApproval(po: PurchaseOrder, action: "approve" | "return" | "reject") {
+    setError(null);
+    let comment: string | undefined;
+    if (action === "return" || action === "reject") {
+      const label = action === "return" ? "devolver" : "rejeitar";
+      const input = window.prompt(`Comentário para ${label} a adjudicação ${po.po_number} (obrigatório):`);
+      if (input === null) return; // cancelou
+      if (input.trim() === "") {
+        setError("O comentário é obrigatório.");
+        return;
+      }
+      comment = input.trim();
+    } else {
+      if (!window.confirm(`Aprovar a adjudicação ${po.po_number}?`)) return;
+    }
+    try {
+      await decideApproval(po.id, action, comment);
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Não foi possível concluir a decisão.");
     }
   }
 
@@ -286,9 +350,13 @@ function ProcurementShell({ session }: { session: Session }) {
     refresh();
   }, []);
 
+  const myPendingApprovals = purchaseOrders.filter(
+    (po) => po.status === "pending_approval" && (po.approver_id === currentStaff?.id || canAdmin),
+  );
   const navItems: NavItem[] = [
     { key: "dashboard", label: "Dashboard", icon: BarChart3 },
     { key: "purchase-orders", label: "Adjudicações", icon: ClipboardList },
+    { key: "approvals", label: myPendingApprovals.length > 0 ? `Aprovações (${myPendingApprovals.length})` : "Aprovações", icon: CheckCircle2 },
     { key: "accruals", label: "Accruals", icon: TrendingUp },
     { key: "reinvoicing", label: "Refaturação", icon: Repeat, disabled: !canAdmin },
     { key: "new-po", label: "Nova Adjudicação", icon: FilePlus2, disabled: !canWritePo },
@@ -373,6 +441,42 @@ function ProcurementShell({ session }: { session: Session }) {
             )}
             {view === "accruals" && <AccrualsView />}
             {view === "reinvoicing" && <ReinvoicingView currentStaffId={currentStaff?.id ?? null} />}
+            {view === "approvals" && (
+              <section className="work-section">
+                <div className="section-heading"><h2>A aguardar a minha aprovação</h2></div>
+                {myPendingApprovals.length === 0 ? (
+                  <p className="muted">Não tem adjudicações a aguardar aprovação.</p>
+                ) : (
+                  <div className="table-wrap">
+                    <table className="recon-table">
+                      <thead>
+                        <tr>
+                          <th>Nº</th><th>Obra</th><th>Fornecedor</th><th className="num">Valor</th>
+                          <th>Criada por</th><th />
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {myPendingApprovals.map((po) => (
+                          <tr key={po.id}>
+                            <td>{po.po_number}</td>
+                            <td>{po.project?.project_name ?? "—"}</td>
+                            <td>{po.supplier?.supplier_name ?? "—"}</td>
+                            <td className="num">{money(po.grand_total)}</td>
+                            <td>{po.requester?.full_name ?? "—"}</td>
+                            <td className="approval-actions">
+                              <button className="link-button" onClick={() => setPreviewPurchaseOrder(po)}>Ver</button>
+                              <button className="approve-btn" onClick={() => handleDecideApproval(po, "approve")}>Aprovar</button>
+                              <button className="return-btn" onClick={() => handleDecideApproval(po, "return")}>Devolver</button>
+                              <button className="reject-btn" onClick={() => handleDecideApproval(po, "reject")}>Rejeitar</button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </section>
+            )}
             {view === "new-po" && (
               <POForm
                 currentStaff={currentStaff}
@@ -465,6 +569,40 @@ function ProcurementShell({ session }: { session: Session }) {
             onClose={() => setPreviewPurchaseOrder(null)}
             canWrite={canWritePo}
           />
+        )}
+        {approvalPo && (
+          <div className="modal-overlay" onClick={() => { setApprovalPo(null); setChosenApprover(""); }}>
+            <div className="modal-card approval-modal" onClick={(e) => e.stopPropagation()}>
+              <h3>Submeter para aprovação</h3>
+              <p>
+                A adjudicação <strong>{approvalPo.po_number}</strong> ({money(approvalPo.grand_total)}) excede o seu
+                limite de autoridade. Escolha um aprovador com limite suficiente e acesso a esta obra.
+              </p>
+              {possibleApprovers(approvalPo).length === 0 ? (
+                <p className="notice error">
+                  Não há aprovadores disponíveis para esta obra com limite suficiente. Contacte um administrador.
+                </p>
+              ) : (
+                <>
+                  <label>
+                    Aprovador
+                    <select value={chosenApprover} onChange={(e) => setChosenApprover(e.target.value)}>
+                      <option value="">— escolher —</option>
+                      {possibleApprovers(approvalPo).map((m) => (
+                        <option key={m.id} value={m.id}>
+                          {m.full_name}{m.authority_limit != null ? ` (até ${money(m.authority_limit)})` : " (sem limite)"}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <div className="modal-actions">
+                    <button className="secondary" onClick={() => { setApprovalPo(null); setChosenApprover(""); }}>Cancelar</button>
+                    <button onClick={handleSubmitForApproval} disabled={!chosenApprover}>Enviar para aprovação</button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
         )}
       </main>
     </div>
@@ -1368,7 +1506,7 @@ function FilterBar({
           <option value="">Todos os estados</option>
           {statuses.map((status) => (
             <option value={status} key={status}>
-              {status === "validated" ? "Validada" : "Rascunho"}
+              {statusLabel(status)}
             </option>
           ))}
         </select>
@@ -1540,7 +1678,13 @@ function PurchaseOrders({
                   <td>{po.project?.project_name}</td>
                   <td>{po.supplier?.supplier_name}</td>
                   <td>
-                    <span className={`status-pill ${po.status}`}>{po.status}</span>
+                    <span className={`status-pill ${po.status}`}>{statusLabel(po.status)}</span>
+                    {po.status === "draft" && po.approval_comment && (
+                      <span className="devolucao-nota" title={po.approval_comment}>↩ Devolvida: {po.approval_comment}</span>
+                    )}
+                    {po.status === "rejected" && po.approval_comment && (
+                      <span className="devolucao-nota rejeitada" title={po.approval_comment}>✕ {po.approval_comment}</span>
+                    )}
                   </td>
                   <td>{money(po.grand_total)}</td>
                   <td className="actions-cell">
@@ -2294,7 +2438,7 @@ function PurchaseOrderPreview({ po, company }: { po: PurchaseOrder; company: Rec
           </div>
           <div>
             <span>Estado</span>
-            <strong>{po.status === "validated" ? "Validada" : "Rascunho"}</strong>
+            <strong>{statusLabel(po.status)}</strong>
           </div>
           <div>
             <span>Condições de pagamento</span>
