@@ -1,4 +1,4 @@
-# Legendre UK Procurement System
+# Legendre Procurement System
 
 Internal web application for creating, approving, printing, exporting, and tracking Purchase Orders for Legendre UK construction projects.
 
