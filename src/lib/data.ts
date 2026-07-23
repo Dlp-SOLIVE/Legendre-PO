@@ -90,6 +90,7 @@ export async function loadPurchaseOrders(): Promise<PurchaseOrder[]> {
     project: projectById.get(po.project_id) ?? null,
     requester: po.requester_id ? staffById.get(po.requester_id) ?? null : null,
     validator: po.validated_by ? staffById.get(po.validated_by) ?? null : null,
+    sender: po.sent_by ? staffById.get(po.sent_by) ?? null : null,
     category: po.category_id ? categoryById.get(po.category_id) ?? null : null,
     line_items: [...(lineItemsByPurchaseOrderId.get(po.id) ?? [])].sort((a, b) => a.sort_order - b.sort_order),
   }));
@@ -594,5 +595,29 @@ export async function submitForApproval(poId: string, approverId: string): Promi
 export async function decideApproval(poId: string, action: "approve" | "return" | "reject", comment?: string): Promise<void> {
   const client = requireClient();
   const { error } = await client.rpc("decide_approval", { po_id: poId, action, p_comment: comment ?? null });
+  if (error) throw error;
+}
+
+// ─────────────────────────────────────────────
+// LOTE 9 — Registo do envio ao fornecedor
+// ─────────────────────────────────────────────
+
+// Marca a adjudicação como enviada ao fornecedor (o email sai do Outlook).
+export async function markSentToSupplier(poId: string, staffId: string | null): Promise<void> {
+  const client = requireClient();
+  const { error } = await client
+    .from("purchase_orders")
+    .update({ sent_to_supplier_at: new Date().toISOString(), sent_by: staffId })
+    .eq("id", poId);
+  if (error) throw error;
+}
+
+// Desfaz a marcação (caso tenha sido clicada por engano).
+export async function unmarkSentToSupplier(poId: string): Promise<void> {
+  const client = requireClient();
+  const { error } = await client
+    .from("purchase_orders")
+    .update({ sent_to_supplier_at: null, sent_by: null })
+    .eq("id", poId);
   if (error) throw error;
 }
