@@ -27,6 +27,7 @@ import {
   TrendingUp,
   Repeat,
   CheckCircle2,
+  Mail,
 } from "lucide-react";
 import {
   createPurchaseOrder,
@@ -46,6 +47,8 @@ import {
   validatePurchaseOrder,
   submitForApproval,
   decideApproval,
+  markSentToSupplier,
+  unmarkSentToSupplier,
   upsertCategory,
   upsertProject,
   upsertSetting,
@@ -568,6 +571,8 @@ function ProcurementShell({ session }: { session: Session }) {
             settings={references.settings}
             onClose={() => setPreviewPurchaseOrder(null)}
             canWrite={canWritePo}
+            currentStaff={currentStaff}
+            onRefresh={refresh}
           />
         )}
         {approvalPo && (
@@ -2258,8 +2263,54 @@ function POForm({
   );
 }
 
-function PreviewModal({ po, settings, onClose, canWrite }: { po: PurchaseOrder; settings: AppSetting[]; onClose: () => void; canWrite: boolean }) {
+function PreviewModal({ po, settings, onClose, canWrite, currentStaff, onRefresh }: { po: PurchaseOrder; settings: AppSetting[]; onClose: () => void; canWrite: boolean; currentStaff: StaffMember | null; onRefresh: () => Promise<unknown> }) {
   const company = (settings.find((setting) => setting.setting_key === "company")?.setting_value ?? {}) as Record<string, string>;
+  const [sentAt, setSentAt] = useState<string | null>(po.sent_to_supplier_at ?? null);
+  const [sendError, setSendError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const supplierEmail = po.supplier?.email ?? "";
+
+  // Abre o Outlook (cliente de email predefinido) com a mensagem já preenchida.
+  // O PDF tem de ser anexado pelo utilizador — nenhum browser permite anexar ficheiros automaticamente.
+  function openEmailToSupplier() {
+    const obra = po.project?.project_name ?? "";
+    const codigoObra = po.invoice_project_code;
+    const contacto = po.supplier?.contact_name;
+    const assunto = `Adjudicação ${po.po_number}${obra ? ` — ${obra}` : ""}`;
+    const corpo = [
+      contacto ? `Exmo.(a) Sr.(a) ${contacto},` : "Exmos. Senhores,",
+      "",
+      `Junto enviamos a adjudicação ${po.po_number}${obra ? `, referente à obra ${obra}` : ""}.`,
+      "",
+      `Solicitamos que todas as faturas façam referência ao nosso número de adjudicação (${po.po_number})${codigoObra ? ` e ao código de obra ${codigoObra}` : ""}, sem os quais não poderão ser aceites.`,
+      "",
+      "Agradecemos a devolução do documento devidamente assinado.",
+      "",
+      "Com os melhores cumprimentos,",
+      currentStaff?.full_name ?? "",
+      (company.legal_name as string) ?? "LEGDR Engenharia e Construção, Unipessoal Lda",
+    ].join("\r\n");
+    window.location.href = `mailto:${supplierEmail}?cc=${encodeURIComponent(po.requester?.email ?? "")}&subject=${encodeURIComponent(assunto)}&body=${encodeURIComponent(corpo)}`;
+  }
+
+  async function alternarEnviada(enviada: boolean) {
+    setBusy(true);
+    setSendError(null);
+    try {
+      if (enviada) {
+        await markSentToSupplier(po.id, currentStaff?.id ?? null);
+        setSentAt(new Date().toISOString());
+      } else {
+        await unmarkSentToSupplier(po.id);
+        setSentAt(null);
+      }
+      await onRefresh();
+    } catch (err) {
+      setSendError(err instanceof Error ? err.message : "Não foi possível registar o envio.");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   function printPurchaseOrder() {
     const previousTitle = document.title;
@@ -2284,11 +2335,35 @@ function PreviewModal({ po, settings, onClose, canWrite }: { po: PurchaseOrder; 
             <Printer size={16} />
             Imprimir / Guardar PDF
           </button>
+          <button
+            className="secondary"
+            onClick={openEmailToSupplier}
+            disabled={!supplierEmail}
+            title={supplierEmail ? `Abre o email para ${supplierEmail}` : "O fornecedor não tem email na ficha"}
+          >
+            <Mail size={16} />
+            Email ao fornecedor
+          </button>
+          {sentAt ? (
+            <span className="sent-badge">
+              ✓ Enviada em {shortDate(sentAt)}
+              <button className="link-button" disabled={busy} onClick={() => alternarEnviada(false)}>desmarcar</button>
+            </span>
+          ) : (
+            <button className="secondary" disabled={busy} onClick={() => alternarEnviada(true)}>
+              <CheckCircle2 size={16} />
+              Marcar como enviada
+            </button>
+          )}
           <button className="secondary" onClick={onClose}>
             <X size={16} />
             Fechar
           </button>
         </div>
+        <p className="envio-hint no-print">
+          Guarde primeiro o PDF, clique em <strong>Email ao fornecedor</strong> e <strong>anexe o PDF no Outlook</strong> antes de enviar.
+        </p>
+        {sendError && <p className="notice error no-print">{sendError}</p>}
         <PurchaseOrderPreview po={po} company={company} />
         <div className="recon-wrap no-print">
           <DeliveryReconciliation purchaseOrder={po} canWrite={canWrite} />
