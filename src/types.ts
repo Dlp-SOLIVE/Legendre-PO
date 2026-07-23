@@ -103,6 +103,9 @@ export type PurchaseOrder = {
   requester_id: string | null;
   validated_by?: string | null;
   validated_at?: string | null;
+  sent_to_supplier_at?: string | null;
+  sent_by?: string | null;
+  sender?: { full_name: string } | null;
   approver_id?: string | null;
   approval_comment?: string | null;
   submitted_for_approval_at?: string | null;
