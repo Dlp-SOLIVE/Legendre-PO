@@ -1666,3 +1666,25 @@ th {
   position: sticky;
   top: 0;
 }
+
+/* Lote 11 — preçários por fornecedor e obra */
+.preco-input {
+  width: 96px;
+  padding: 5px 7px;
+  border: 1px solid #d7dde5;
+  border-radius: 6px;
+  font-size: 12.5px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.catalogo-filtro {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  border: 1px solid #d7dde5;
+  border-radius: 8px;
+  font-size: 13px;
+  margin: 10px 0;
+}
+.variacao-sobe { color: #c0392b; font-weight: 600; }
+.variacao-desce { color: #1a7f3c; font-weight: 600; }
