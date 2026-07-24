@@ -29,6 +29,7 @@ import {
   CheckCircle2,
   Mail,
   ClipboardPaste,
+  Tags,
 } from "lucide-react";
 import {
   createPurchaseOrder,
@@ -48,6 +49,7 @@ import {
   validatePurchaseOrder,
   submitForApproval,
   decideApproval,
+  loadPriceItems,
   markSentToSupplier,
   unmarkSentToSupplier,
   upsertCategory,
@@ -57,11 +59,13 @@ import {
   type PurchaseOrderDraft,
 } from "./lib/data";
 import { downloadCsv } from "./lib/csv";
+import { parseExcelLines } from "./lib/excel";
 import { hasSupabaseConfig, supabase } from "./lib/supabase";
 import { isoToday, money, shortDate } from "./lib/format";
 import { DeliveryReconciliation } from "./DeliveryReconciliation";
 import { AccrualsView } from "./AccrualsView";
 import { ReinvoicingView } from "./ReinvoicingView";
+import { PriceListView } from "./PriceListView";
 import legendreLogo from "./assets/legendre-logo.png";
 import type {
   AppRole,
@@ -73,6 +77,7 @@ import type {
   PurchaseOrderLineItem,
   PurchaseOrderStatus,
   ReferenceData,
+  SupplierPriceItem,
   StaffMember,
   Supplier,
 } from "./types";
@@ -83,6 +88,7 @@ type ViewKey =
   | "accruals"
   | "reinvoicing"
   | "approvals"
+  | "price-lists"
   | "new-po"
   | "suppliers"
   | "projects"
@@ -108,60 +114,6 @@ const emptyReferences: ReferenceData = {
 };
 
 const VAT_RATES = [23, 13, 6, 0];
-
-// ── Colar linhas do Excel ──────────────────────────────
-// Interpreta números no formato português: "1.234,56 €" → 1234.56
-function parsePtNumber(raw: string): number {
-  if (!raw) return 0;
-  let s = raw
-    .replace(/\u00a0/g, " ")          // espaço não-quebrável do Excel
-    .replace(/[€$£]/g, "")
-    .replace(/\s/g, "")
-    .trim();
-  if (!s) return 0;
-  const temVirgula = s.includes(",");
-  const temPonto = s.includes(".");
-  if (temVirgula && temPonto) {
-    // "1.234,56" → ponto é milhares, vírgula é decimal
-    s = s.replace(/\./g, "").replace(",", ".");
-  } else if (temVirgula) {
-    s = s.replace(",", ".");
-  } else if (temPonto) {
-    // só ponto: se tiver exatamente 3 dígitos a seguir, é separador de milhares
-    const partes = s.split(".");
-    if (partes.length === 2 && partes[1].length === 3) s = partes.join("");
-  }
-  const n = Number(s);
-  return Number.isFinite(n) ? n : 0;
-}
-
-type LinhaColada = { item_ref: string; description: string; quantity: number; unit: string; rate: number };
-
-// Lê o que foi colado do Excel. Ordem esperada: Ref. | Descrição | Qtd | Unidade | Preço
-function parseExcelLines(texto: string): LinhaColada[] {
-  const linhas = texto.split(/\r?\n/).filter((l) => l.trim() !== "");
-  const resultado: LinhaColada[] = [];
-  linhas.forEach((linha, indice) => {
-    // O Excel separa colunas por tabulação; aceita-se também ponto-e-vírgula
-    const col = linha.split(/\t|;/).map((c) => c.trim());
-    const description = (col[1] ?? "").trim();
-    // ignora a linha de cabeçalho, se vier colada
-    if (indice === 0) {
-      const junto = col.join(" ").toLowerCase();
-      const pareceCabecalho = /descri|refer|artigo|pre[çc]o|quantid/.test(junto) && parsePtNumber(col[4] ?? "") === 0;
-      if (pareceCabecalho) return;
-    }
-    if (!description) return; // sem descrição não há linha
-    resultado.push({
-      item_ref: (col[0] ?? "").trim(),
-      description,
-      quantity: parsePtNumber(col[2] ?? ""),
-      unit: (col[3] ?? "").trim() || "un",
-      rate: parsePtNumber(col[4] ?? ""),
-    });
-  });
-  return resultado;
-}
 
 const statuses: PurchaseOrderStatus[] = ["draft", "pending_approval", "validated", "rejected"];
 
@@ -420,6 +372,7 @@ function ProcurementShell({ session }: { session: Session }) {
     { key: "reinvoicing", label: "Refaturação", icon: Repeat, disabled: !canAdmin },
     { key: "new-po", label: "Nova Adjudicação", icon: FilePlus2, disabled: !canWritePo },
     { key: "suppliers", label: "Fornecedores", icon: Package, disabled: !canManageSuppliers },
+    { key: "price-lists", label: "Preçários", icon: Tags, disabled: !currentStaff?.is_active },
     { key: "projects", label: "Obras", icon: Building2, disabled: !canAdmin },
     { key: "staff", label: "Equipa", icon: Users, disabled: !currentStaff?.is_active },
     { key: "categories", label: "Categorias", icon: Archive, disabled: !canAdmin },
@@ -500,6 +453,7 @@ function ProcurementShell({ session }: { session: Session }) {
             )}
             {view === "accruals" && <AccrualsView />}
             {view === "reinvoicing" && <ReinvoicingView currentStaffId={currentStaff?.id ?? null} />}
+            {view === "price-lists" && <PriceListView references={references} canWrite={canWritePo} />}
             {view === "approvals" && (
               <section className="work-section">
                 <div className="section-heading"><h2>A aguardar a minha aprovação</h2></div>
@@ -1927,6 +1881,11 @@ function POForm({
   const [selectedLines, setSelectedLines] = useState<Set<number>>(new Set());
   const [pasteOpen, setPasteOpen] = useState(false);
   const [pasteText, setPasteText] = useState("");
+  const [catalogOpen, setCatalogOpen] = useState(false);
+  const [catalogItems, setCatalogItems] = useState<SupplierPriceItem[]>([]);
+  const [catalogQtd, setCatalogQtd] = useState<Record<string, string>>({});
+  const [catalogLoading, setCatalogLoading] = useState(false);
+  const [catalogFiltro, setCatalogFiltro] = useState("");
   const [batchField, setBatchField] = useState("vat_rate");
   const [batchValue, setBatchValue] = useState("");
 
@@ -1940,6 +1899,43 @@ function POForm({
   function toggleAllLines() {
     setSelectedLines((current) => (current.size === lines.length ? new Set() : new Set(lines.map((_, i) => i))));
   }
+  async function abrirPrecario() {
+    setCatalogOpen(true);
+    setCatalogLoading(true);
+    setCatalogQtd({});
+    setCatalogFiltro("");
+    try {
+      setCatalogItems(await loadPriceItems(supplierId, projectId));
+    } catch {
+      setCatalogItems([]);
+    } finally {
+      setCatalogLoading(false);
+    }
+  }
+
+  function importarDoPrecario() {
+    const escolhidos = catalogItems.filter((i) => Number(catalogQtd[i.id] ?? 0) > 0);
+    if (escolhidos.length === 0) return;
+    setLines((atuais) => [
+      ...atuais,
+      ...escolhidos.map((i, k) => ({
+        sort_order: atuais.length + k + 1,
+        item_ref: i.item_ref ?? "",
+        description: i.description,
+        quantity: Number(catalogQtd[i.id]),
+        unit: i.unit,
+        rate: Number(i.unit_price),
+        discount_pct: 0,
+        discount_pct_2: 0,
+        vat_rate: 23,
+        category_id: i.category_id ?? "",
+        expense_type: "",
+      })),
+    ]);
+    setCatalogOpen(false);
+    setCatalogQtd({});
+  }
+
   function adicionarLinhasColadas() {
     const novas = parseExcelLines(pasteText);
     if (novas.length === 0) return;
@@ -2165,6 +2161,10 @@ function POForm({
           <div className="section-heading compact-heading">
             <h2>Linhas</h2>
             <div className="linhas-acoes">
+              <button type="button" className="secondary" onClick={abrirPrecario} disabled={!supplierId || !projectId}>
+                <Tags size={16} />
+                Importar do preçário
+              </button>
               <button type="button" className="secondary" onClick={() => setPasteOpen(true)}>
                 <ClipboardPaste size={16} />
                 Colar do Excel
@@ -2175,6 +2175,82 @@ function POForm({
               </button>
             </div>
           </div>
+          {catalogOpen && (
+            <div className="modal-overlay" onClick={() => setCatalogOpen(false)}>
+              <div className="modal-card paste-modal" onClick={(e) => e.stopPropagation()}>
+                <h3>Importar do preçário</h3>
+                <p className="muted">
+                  Preçário deste fornecedor para esta obra. Indique a quantidade dos artigos que quer adicionar
+                  — só entram os que tiverem quantidade.
+                </p>
+                {catalogLoading ? (
+                  <p className="muted">A carregar…</p>
+                ) : catalogItems.length === 0 ? (
+                  <p className="notice">
+                    Ainda não há preçário para este fornecedor nesta obra. Crie-o no separador <strong>Preçários</strong>.
+                  </p>
+                ) : (
+                  <>
+                    <input
+                      className="catalogo-filtro"
+                      value={catalogFiltro}
+                      onChange={(e) => setCatalogFiltro(e.target.value)}
+                      placeholder="Procurar artigo…"
+                    />
+                    <div className="table-wrap paste-preview">
+                      <table className="recon-table">
+                        <thead>
+                          <tr>
+                            <th>Ref.</th>
+                            <th>Descrição</th>
+                            <th>Un.</th>
+                            <th className="num">Preço</th>
+                            <th className="num">Quantidade</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {catalogItems
+                            .filter((i) =>
+                              catalogFiltro.trim() === "" ||
+                              i.description.toLowerCase().includes(catalogFiltro.toLowerCase()) ||
+                              (i.item_ref ?? "").toLowerCase().includes(catalogFiltro.toLowerCase()))
+                            .map((i) => (
+                              <tr key={i.id} className={Number(catalogQtd[i.id] ?? 0) > 0 ? "line-row-selected" : ""}>
+                                <td>{i.item_ref || "—"}</td>
+                                <td>{i.description}</td>
+                                <td>{i.unit}</td>
+                                <td className="num">{money(Number(i.unit_price))}</td>
+                                <td className="num">
+                                  <input
+                                    className="preco-input"
+                                    type="number"
+                                    min="0"
+                                    step="any"
+                                    value={catalogQtd[i.id] ?? ""}
+                                    onChange={(e) => setCatalogQtd({ ...catalogQtd, [i.id]: e.target.value })}
+                                    placeholder="0"
+                                  />
+                                </td>
+                              </tr>
+                            ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </>
+                )}
+                <div className="modal-actions">
+                  <button type="button" className="secondary" onClick={() => setCatalogOpen(false)}>Cancelar</button>
+                  <button
+                    type="button"
+                    onClick={importarDoPrecario}
+                    disabled={catalogItems.filter((i) => Number(catalogQtd[i.id] ?? 0) > 0).length === 0}
+                  >
+                    Adicionar {catalogItems.filter((i) => Number(catalogQtd[i.id] ?? 0) > 0).length || ""} artigo(s)
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
           {pasteOpen && (
             <div className="modal-overlay" onClick={() => setPasteOpen(false)}>
               <div className="modal-card paste-modal" onClick={(e) => e.stopPropagation()}>
