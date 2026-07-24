@@ -28,6 +28,7 @@ import {
   Repeat,
   CheckCircle2,
   Mail,
+  ClipboardPaste,
 } from "lucide-react";
 import {
   createPurchaseOrder,
@@ -107,6 +108,61 @@ const emptyReferences: ReferenceData = {
 };
 
 const VAT_RATES = [23, 13, 6, 0];
+
+// ── Colar linhas do Excel ──────────────────────────────
+// Interpreta números no formato português: "1.234,56 €" → 1234.56
+function parsePtNumber(raw: string): number {
+  if (!raw) return 0;
+  let s = raw
+    .replace(/\u00a0/g, " ")          // espaço não-quebrável do Excel
+    .replace(/[€$£]/g, "")
+    .replace(/\s/g, "")
+    .trim();
+  if (!s) return 0;
+  const temVirgula = s.includes(",");
+  const temPonto = s.includes(".");
+  if (temVirgula && temPonto) {
+    // "1.234,56" → ponto é milhares, vírgula é decimal
+    s = s.replace(/\./g, "").replace(",", ".");
+  } else if (temVirgula) {
+    s = s.replace(",", ".");
+  } else if (temPonto) {
+    // só ponto: se tiver exatamente 3 dígitos a seguir, é separador de milhares
+    const partes = s.split(".");
+    if (partes.length === 2 && partes[1].length === 3) s = partes.join("");
+  }
+  const n = Number(s);
+  return Number.isFinite(n) ? n : 0;
+}
+
+type LinhaColada = { item_ref: string; description: string; quantity: number; unit: string; rate: number };
+
+// Lê o que foi colado do Excel. Ordem esperada: Ref. | Descrição | Qtd | Unidade | Preço
+function parseExcelLines(texto: string): LinhaColada[] {
+  const linhas = texto.split(/\r?\n/).filter((l) => l.trim() !== "");
+  const resultado: LinhaColada[] = [];
+  linhas.forEach((linha, indice) => {
+    // O Excel separa colunas por tabulação; aceita-se também ponto-e-vírgula
+    const col = linha.split(/\t|;/).map((c) => c.trim());
+    const description = (col[1] ?? "").trim();
+    // ignora a linha de cabeçalho, se vier colada
+    if (indice === 0) {
+      const junto = col.join(" ").toLowerCase();
+      const pareceCabecalho = /descri|refer|artigo|pre[çc]o|quantid/.test(junto) && parsePtNumber(col[4] ?? "") === 0;
+      if (pareceCabecalho) return;
+    }
+    if (!description) return; // sem descrição não há linha
+    resultado.push({
+      item_ref: (col[0] ?? "").trim(),
+      description,
+      quantity: parsePtNumber(col[2] ?? ""),
+      unit: (col[3] ?? "").trim() || "un",
+      rate: parsePtNumber(col[4] ?? ""),
+    });
+  });
+  return resultado;
+}
+
 const statuses: PurchaseOrderStatus[] = ["draft", "pending_approval", "validated", "rejected"];
 
 function statusLabel(status: PurchaseOrderStatus): string {
@@ -1869,6 +1925,8 @@ function POForm({
 
   // ── Batch apply: aplicar um campo a várias linhas de uma vez ──
   const [selectedLines, setSelectedLines] = useState<Set<number>>(new Set());
+  const [pasteOpen, setPasteOpen] = useState(false);
+  const [pasteText, setPasteText] = useState("");
   const [batchField, setBatchField] = useState("vat_rate");
   const [batchValue, setBatchValue] = useState("");
 
@@ -1882,6 +1940,29 @@ function POForm({
   function toggleAllLines() {
     setSelectedLines((current) => (current.size === lines.length ? new Set() : new Set(lines.map((_, i) => i))));
   }
+  function adicionarLinhasColadas() {
+    const novas = parseExcelLines(pasteText);
+    if (novas.length === 0) return;
+    setLines((atuais) => [
+      ...atuais,
+      ...novas.map((n, i) => ({
+        sort_order: atuais.length + i + 1,
+        item_ref: n.item_ref,
+        description: n.description,
+        quantity: n.quantity,
+        unit: n.unit,
+        rate: n.rate,
+        discount_pct: 0,
+        discount_pct_2: 0,
+        vat_rate: 23,
+        category_id: "",
+        expense_type: "",
+      })),
+    ]);
+    setPasteText("");
+    setPasteOpen(false);
+  }
+
   function applyBatch() {
     if (selectedLines.size === 0) return;
     setLines((current) => current.map((line, index) => {
@@ -2083,11 +2164,75 @@ function POForm({
         <div className="line-editor">
           <div className="section-heading compact-heading">
             <h2>Linhas</h2>
-            <button type="button" onClick={() => setLines([...lines, { sort_order: lines.length + 1, item_ref: "", description: "", quantity: 1, unit: "un", rate: 0, discount_pct: 0, discount_pct_2: 0, vat_rate: 23, category_id: "", expense_type: "" }])}>
-              <Plus size={16} />
-              Adicionar linha
-            </button>
+            <div className="linhas-acoes">
+              <button type="button" className="secondary" onClick={() => setPasteOpen(true)}>
+                <ClipboardPaste size={16} />
+                Colar do Excel
+              </button>
+              <button type="button" onClick={() => setLines([...lines, { sort_order: lines.length + 1, item_ref: "", description: "", quantity: 1, unit: "un", rate: 0, discount_pct: 0, discount_pct_2: 0, vat_rate: 23, category_id: "", expense_type: "" }])}>
+                <Plus size={16} />
+                Adicionar linha
+              </button>
+            </div>
           </div>
+          {pasteOpen && (
+            <div className="modal-overlay" onClick={() => setPasteOpen(false)}>
+              <div className="modal-card paste-modal" onClick={(e) => e.stopPropagation()}>
+                <h3>Colar linhas do Excel</h3>
+                <p className="muted">
+                  No Excel, selecione as células e copie (Ctrl+C). Cole aqui com Ctrl+V.
+                  A ordem das colunas deve ser: <strong>Ref. | Descrição | Qtd | Unidade | Preço</strong>.
+                </p>
+                <textarea
+                  rows={8}
+                  value={pasteText}
+                  onChange={(e) => setPasteText(e.target.value)}
+                  placeholder={"Cole aqui...\n\nExemplo:\nART-01\tBetão C30/37\t450\tm3\t82,50 €"}
+                />
+                {pasteText.trim() !== "" && (() => {
+                  const previstas = parseExcelLines(pasteText);
+                  if (previstas.length === 0) {
+                    return <p className="notice error">Não foi possível ler nenhuma linha. Confirme que copiou do Excel (as colunas devem vir separadas por tabulação).</p>;
+                  }
+                  const semPreco = previstas.filter((l) => l.rate === 0).length;
+                  return (
+                    <>
+                      <p className="paste-resumo">
+                        <strong>{previstas.length}</strong> linha(s) reconhecida(s)
+                        {semPreco > 0 && <span className="paste-aviso"> · {semPreco} sem preço (ficam a 0)</span>}
+                      </p>
+                      <div className="table-wrap paste-preview">
+                        <table className="recon-table">
+                          <thead>
+                            <tr><th>Ref.</th><th>Descrição</th><th className="num">Qtd</th><th>Un.</th><th className="num">Preço</th><th className="num">Total</th></tr>
+                          </thead>
+                          <tbody>
+                            {previstas.slice(0, 50).map((l, i) => (
+                              <tr key={i}>
+                                <td>{l.item_ref || "—"}</td>
+                                <td>{l.description}</td>
+                                <td className="num">{l.quantity}</td>
+                                <td>{l.unit}</td>
+                                <td className="num">{money(l.rate)}</td>
+                                <td className="num">{money(l.quantity * l.rate)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                        {previstas.length > 50 && <p className="muted">…e mais {previstas.length - 50} linha(s).</p>}
+                      </div>
+                    </>
+                  );
+                })()}
+                <div className="modal-actions">
+                  <button type="button" className="secondary" onClick={() => { setPasteOpen(false); setPasteText(""); }}>Cancelar</button>
+                  <button type="button" onClick={adicionarLinhasColadas} disabled={parseExcelLines(pasteText).length === 0}>
+                    Adicionar {parseExcelLines(pasteText).length || ""} linha(s)
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
           {selectedLines.size > 0 && (
             <div className="batch-apply">
               <span className="batch-count">{selectedLines.size} linha(s) selecionada(s)</span>
