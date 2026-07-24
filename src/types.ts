@@ -223,6 +223,22 @@ export type ConsortiumReinvoicing = {
   redebito_registado: number | null;
 };
 
+export type SupplierPriceItem = {
+  id: string;
+  supplier_id: string;
+  project_id: string;
+  item_ref: string | null;
+  description: string;
+  unit: string;
+  unit_price: number;
+  category_id: string | null;
+  notes: string | null;
+  is_active: boolean;
+  price_updated_at: string;
+  created_at?: string;
+  updated_at?: string;
+};
+
 export type ReferenceData = {
   suppliers: Supplier[];
   projects: Project[];
