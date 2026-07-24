@@ -1621,3 +1621,48 @@ th {
   color: #6b7a8c;
   margin: 6px 0 0;
 }
+
+/* Lote 10 — colar linhas do Excel */
+.linhas-acoes {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.paste-modal {
+  max-width: 900px;
+  width: 92vw;
+}
+.paste-modal textarea {
+  width: 100%;
+  box-sizing: border-box;
+  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+  font-size: 12.5px;
+  padding: 10px;
+  border: 1px solid #d7dde5;
+  border-radius: 8px;
+  margin-top: 10px;
+  resize: vertical;
+}
+.paste-resumo {
+  margin: 12px 0 6px;
+  font-size: 13.5px;
+  color: #1a7f3c;
+}
+.paste-aviso {
+  color: #b06f00;
+  font-weight: 600;
+}
+.paste-preview {
+  max-height: 320px;
+  overflow-y: auto;
+  border: 1px solid #e2e8f1;
+  border-radius: 8px;
+}
+.paste-preview .recon-table {
+  font-size: 12.5px;
+  margin: 0;
+}
+.paste-preview thead th {
+  position: sticky;
+  top: 0;
+}
