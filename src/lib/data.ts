@@ -8,6 +8,7 @@ import type {
   PurchaseOrderLineItem,
   PurchaseOrderStatus,
   ReferenceData,
+  SupplierPriceItem,
   StaffMember,
   StaffProjectAccess,
   Supplier,
@@ -620,4 +621,63 @@ export async function unmarkSentToSupplier(poId: string): Promise<void> {
     .update({ sent_to_supplier_at: null, sent_by: null })
     .eq("id", poId);
   if (error) throw error;
+}
+
+// ─────────────────────────────────────────────
+// LOTE 11 — Preçário por fornecedor e obra
+// ─────────────────────────────────────────────
+
+// Chave de identificação: a Ref. quando existe, senão a Descrição.
+export function priceItemKey(item: { item_ref?: string | null; description: string }): string {
+  const ref = (item.item_ref ?? "").trim();
+  return (ref !== "" ? ref : item.description.trim()).toLowerCase();
+}
+
+export async function loadPriceItems(supplierId: string, projectId: string): Promise<SupplierPriceItem[]> {
+  const client = requireClient();
+  const { data, error } = await client
+    .from("supplier_price_items")
+    .select("*")
+    .eq("supplier_id", supplierId)
+    .eq("project_id", projectId)
+    .order("description", { ascending: true });
+  if (error) throw error;
+  return (data ?? []) as SupplierPriceItem[];
+}
+
+export async function insertPriceItems(rows: Partial<SupplierPriceItem>[]): Promise<void> {
+  if (rows.length === 0) return;
+  const client = requireClient();
+  const { error } = await client.from("supplier_price_items").insert(rows);
+  if (error) throw error;
+}
+
+export async function updatePriceItem(id: string, patch: Partial<SupplierPriceItem>): Promise<void> {
+  const client = requireClient();
+  const corpo = patch.unit_price !== undefined
+    ? { ...patch, price_updated_at: new Date().toISOString() }
+    : patch;
+  const { error } = await client.from("supplier_price_items").update(corpo).eq("id", id);
+  if (error) throw error;
+}
+
+export async function deletePriceItem(id: string): Promise<void> {
+  const client = requireClient();
+  const { error } = await client.from("supplier_price_items").delete().eq("id", id);
+  if (error) throw error;
+}
+
+// Em que obras é que este fornecedor já tem preçário (e quantos artigos em cada).
+export async function loadPriceProjectCounts(supplierId: string): Promise<Record<string, number>> {
+  const client = requireClient();
+  const { data, error } = await client
+    .from("supplier_price_items")
+    .select("project_id")
+    .eq("supplier_id", supplierId);
+  if (error) throw error;
+  const contagem: Record<string, number> = {};
+  ((data ?? []) as { project_id: string }[]).forEach((r) => {
+    contagem[r.project_id] = (contagem[r.project_id] ?? 0) + 1;
+  });
+  return contagem;
 }
