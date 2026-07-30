@@ -10,14 +10,12 @@ const MONTH_NAMES = [
 ];
 
 function monthLabel(iso: string) {
-  // iso vem como "2026-06-01"
   const [y, m] = iso.split("-");
   const idx = Number(m) - 1;
   return `${MONTH_NAMES[idx] ?? m} ${y}`;
 }
 
 // A view v_accruals_by_project_month também devolve expense_type (tipo de despesa).
-// Alargamos o tipo localmente para o usar sem tocar em types.ts.
 type AccrualRow = AccrualByProjectMonth & { expense_type?: string | null };
 
 // Linha do breakdown por artigo (view vw_accruals_breakdown)
@@ -71,7 +69,6 @@ export function AccrualsView() {
     })();
   }, []);
 
-  // opções de filtro (distintas)
   const projects = useMemo(
     () => Array.from(new Map(rows.map((r) => [r.project_id, r.project_name])).entries()),
     [rows],
@@ -84,7 +81,6 @@ export function AccrualsView() {
     () => Array.from(new Set(rows.map((r) => r.expense_type).filter(Boolean))).sort() as string[],
     [rows],
   );
-  // Subcategorias (rubricas) — em cascata com o tipo de despesa selecionado.
   const subcategorias = useMemo(() => {
     const m = new Map<string, string>();
     for (const r of rows) {
@@ -114,7 +110,7 @@ export function AccrualsView() {
     }
     setExpanded(key);
     setDetailError(null);
-    if (detailCache[key]) return; // já em cache
+    if (detailCache[key]) return;
 
     setDetailLoading(key);
     try {
@@ -144,7 +140,7 @@ export function AccrualsView() {
       </div>
       <p className="muted">
         Custo entregue mas ainda não faturado, por obra, mês e rubrica. Valores ao preço da adjudicação.
-        Clica numa linha para ver os artigos que a compõem.
+        Clica numa linha (ou Enter) para ver os artigos que a compõem.
       </p>
 
       <div className="accrual-filters">
@@ -224,8 +220,16 @@ export function AccrualsView() {
                     <Fragment key={`${key}-${i}`}>
                       <tr
                         className={`accrual-row${isOpen ? " open" : ""}`}
+                        role="button"
+                        tabIndex={0}
+                        aria-expanded={isOpen}
                         onClick={() => toggleDetail(r)}
-                        style={{ cursor: "pointer" }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            toggleDetail(r);
+                          }
+                        }}
                       >
                         <td>{isOpen ? "▾ " : "▸ "}{r.project_name}</td>
                         <td>{monthLabel(r.month)}</td>
