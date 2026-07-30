@@ -1694,3 +1694,55 @@ th {
 .recon-table.nested { width: 100%; margin: 4px 0; }
 .recon-table.nested th { font-weight: 600; opacity: .75; }
 
+
+/* ================= Melhorias UI/UX (auditoria) ================= */
+
+/* 1. Cabeçalho de tabela fixo ao rolar listas longas */
+.table-wrap { max-height: 72vh; overflow: auto; }
+.table-wrap > table > thead th { position: sticky; top: 0; z-index: 2; }
+@media print { .table-wrap { max-height: none; overflow: visible; } }
+
+/* 2. Foco visível para navegação por teclado (acessibilidade) */
+a:focus-visible,
+button:focus-visible,
+[role="button"]:focus-visible,
+[tabindex]:focus-visible,
+.nav-item:focus-visible {
+  outline: 2px solid #cf2f45;
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* 3. Linhas clicáveis do drill-down de accruals: afordância + estado */
+.accrual-row { cursor: pointer; }
+.accrual-row:hover { background: #f4f7fb; }
+.accrual-row.open { background: #eef3fa; }
+.accrual-row:focus-visible { outline: 2px solid #cf2f45; outline-offset: -2px; }
+.accrual-detail-row > td { background: #f9fbfd; padding: 4px 12px 12px; }
+
+/* 4. Cabeçalhos de tabela ordenáveis */
+th.sortable { cursor: pointer; user-select: none; }
+th.sortable:hover { color: #cf2f45; }
+.sort-ind { margin-left: 4px; opacity: .55; font-size: .85em; }
+
+/* 5. Estado vazio com ação */
+.empty-state { text-align: center; color: #6f6d76; padding: 28px 16px; }
+.empty-state .empty-action { margin-top: 12px; }
+
+/* 6. Pesquisa nas listas */
+.list-search { margin-bottom: 12px; }
+.list-search input { max-width: 360px; width: 100%; }
+
+/* 7. Toasts de feedback (aparecem e desaparecem sozinhos) */
+.toast-stack { position: fixed; right: 18px; bottom: 18px; display: grid; gap: 8px; z-index: 1200; }
+.toast {
+  background: #242329; color: #fff; padding: 10px 14px; border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.18); font-size: .9rem; max-width: 340px;
+  animation: toast-in .18s ease-out;
+}
+.toast.success { background: #1e7a4a; }
+.toast.error { background: #b3261e; }
+@keyframes toast-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+/* 8. Modal acessível */
+.modal-card:focus { outline: none; }
