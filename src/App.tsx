@@ -290,7 +290,7 @@ function ProcurementShell({ session }: { session: Session }) {
       setError("Só a pessoa que criou este rascunho de adjudicação o pode eliminar.");
       return;
     }
-    const confirmed = window.confirm(`Delete draft purchase order ${po.po_number}? This cannot be undone.`);
+    const confirmed = window.confirm(`Eliminar a adjudicação em rascunho ${po.po_number}? Esta ação não pode ser anulada.`);
     if (!confirmed) return;
 
     setError(null);
@@ -587,7 +587,7 @@ function ProcurementShell({ session }: { session: Session }) {
         )}
         {approvalPo && (
           <div className="modal-overlay" onClick={() => { setApprovalPo(null); setChosenApprover(""); }}>
-            <div className="modal-card approval-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-card approval-modal" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
               <h3>Submeter para aprovação</h3>
               <p>
                 A adjudicação <strong>{approvalPo.po_number}</strong> ({money(approvalPo.grand_total)}) excede o seu
@@ -1651,6 +1651,12 @@ function PurchaseOrders({
     [references.categories, typeFilter],
   );
 
+  const [searchTerm, setSearchTerm] = useState("");
+  const [sortKey, setSortKey] = useState<
+    "po_number" | "po_date" | "project" | "supplier" | "status" | "grand_total"
+  >("po_date");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+
   const filteredPurchaseOrders = useMemo(
     () =>
       purchaseOrders.filter((po) => {
@@ -1658,13 +1664,53 @@ function PurchaseOrders({
         if (requesterFilter && po.requester_id !== requesterFilter) return false;
         if (typeFilter && !(po.line_items ?? []).some((l) => l.category?.expense_type === typeFilter)) return false;
         if (subFilter && !(po.line_items ?? []).some((l) => l.category_id === subFilter)) return false;
+        if (searchTerm) {
+          const q = searchTerm.toLowerCase();
+          const hay = `${po.po_number ?? ""} ${po.supplier?.supplier_name ?? ""} ${po.project?.project_name ?? ""}`.toLowerCase();
+          if (!hay.includes(q)) return false;
+        }
         return true;
       }),
-    [projectFilter, purchaseOrders, requesterFilter, typeFilter, subFilter],
+    [projectFilter, purchaseOrders, requesterFilter, typeFilter, subFilter, searchTerm],
   );
+
+  const sortedPurchaseOrders = useMemo(() => {
+    const dir = sortDir === "asc" ? 1 : -1;
+    const val = (po: PurchaseOrder): string | number =>
+      sortKey === "grand_total" ? Number(po.grand_total ?? 0)
+      : sortKey === "po_number" ? (po.po_number ?? "")
+      : sortKey === "supplier" ? (po.supplier?.supplier_name ?? "")
+      : sortKey === "project" ? (po.project?.project_name ?? "")
+      : sortKey === "status" ? (po.status ?? "")
+      : (po.po_date ?? "");
+    return [...filteredPurchaseOrders].sort((a, b) => {
+      const va = val(a);
+      const vb = val(b);
+      if (typeof va === "number" && typeof vb === "number") return (va - vb) * dir;
+      return String(va).localeCompare(String(vb), "pt") * dir;
+    });
+  }, [filteredPurchaseOrders, sortKey, sortDir]);
+
+  const toggleSort = (key: typeof sortKey) => {
+    if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    else {
+      setSortKey(key);
+      setSortDir("asc");
+    }
+  };
+  const sortInd = (key: typeof sortKey) => (sortKey === key ? (sortDir === "asc" ? "▲" : "▼") : "");
 
   return (
     <section className="work-section">
+      <div className="list-search">
+        <input
+          type="search"
+          placeholder="Pesquisar por nº, fornecedor ou obra…"
+          value={searchTerm}
+          onChange={(event) => setSearchTerm(event.target.value)}
+          aria-label="Pesquisar adjudicações"
+        />
+      </div>
       <div className="po-list-toolbar">
         <label>
           Obra
@@ -1713,18 +1759,18 @@ function PurchaseOrders({
         <table>
           <thead>
             <tr>
-              <th>Nº Adjudicação</th>
-              <th>Data</th>
+              <th className="sortable" onClick={() => toggleSort("po_number")}>Nº Adjudicação <span className="sort-ind">{sortInd("po_number")}</span></th>
+              <th className="sortable" onClick={() => toggleSort("po_date")}>Data <span className="sort-ind">{sortInd("po_date")}</span></th>
               <th>Iniciais</th>
-              <th>Obra</th>
-              <th>Fornecedor</th>
-              <th>Estado</th>
-              <th>Total</th>
+              <th className="sortable" onClick={() => toggleSort("project")}>Obra <span className="sort-ind">{sortInd("project")}</span></th>
+              <th className="sortable" onClick={() => toggleSort("supplier")}>Fornecedor <span className="sort-ind">{sortInd("supplier")}</span></th>
+              <th className="sortable" onClick={() => toggleSort("status")}>Estado <span className="sort-ind">{sortInd("status")}</span></th>
+              <th className="sortable" onClick={() => toggleSort("grand_total")}>Total <span className="sort-ind">{sortInd("grand_total")}</span></th>
               <th className="actions-cell">Ações</th>
             </tr>
           </thead>
           <tbody>
-            {filteredPurchaseOrders.map((po) => {
+            {sortedPurchaseOrders.map((po) => {
               const canDeleteDraft = canWrite && po.status === "draft" && po.requester_id === currentStaff?.id;
               return (
                 <tr key={po.id}>
@@ -1744,19 +1790,19 @@ function PurchaseOrders({
                   </td>
                   <td>{money(po.grand_total)}</td>
                   <td className="actions-cell">
-                    <button className="icon-button" onClick={() => onPreview(po)} title="Pré-visualizar">
+                    <button className="icon-button" onClick={() => onPreview(po)} title="Pré-visualizar" aria-label="Pré-visualizar">
                       <Eye size={16} />
                     </button>
-                    <button className="icon-button" disabled={!canWrite || po.status !== "draft"} onClick={() => onEdit(po)} title="Editar rascunho">
+                    <button className="icon-button" disabled={!canWrite || po.status !== "draft"} onClick={() => onEdit(po)} title="Editar rascunho" aria-label="Editar rascunho">
                       <Pencil size={16} />
                     </button>
-                    <button className="icon-button" disabled={!canWrite || po.status !== "draft"} onClick={() => onValidate(po)} title="Validar adjudicação">
+                    <button className="icon-button" disabled={!canWrite || po.status !== "draft"} onClick={() => onValidate(po)} title="Validar adjudicação" aria-label="Validar adjudicação">
                       <ArrowRight size={16} />
                     </button>
-                    <button className="icon-button" disabled={!canWrite} onClick={() => onCopy(po)} title="Copiar para novo rascunho">
+                    <button className="icon-button" disabled={!canWrite} onClick={() => onCopy(po)} title="Copiar para novo rascunho" aria-label="Copiar para novo rascunho">
                       <Copy size={16} />
                     </button>
-                    <button className="icon-button danger" disabled={!canDeleteDraft} onClick={() => onDelete(po)} title={canDeleteDraft ? "Eliminar rascunho" : "Só quem criou pode eliminar um rascunho de Adjudicação"}>
+                    <button className="icon-button danger" disabled={!canDeleteDraft} onClick={() => onDelete(po)} aria-label="Eliminar rascunho" title={canDeleteDraft ? "Eliminar rascunho" : "Só quem criou pode eliminar um rascunho de Adjudicação"}>
                       <Trash2 size={16} />
                     </button>
                   </td>
@@ -2218,7 +2264,7 @@ function POForm({
           </div>
           {catalogOpen && (
             <div className="modal-overlay" onClick={() => setCatalogOpen(false)}>
-              <div className="modal-card paste-modal" onClick={(e) => e.stopPropagation()}>
+              <div className="modal-card paste-modal" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
                 <h3>Importar do preçário</h3>
                 <p className="muted">
                   Preçário deste fornecedor para esta obra. Indique a quantidade dos artigos que quer adicionar
@@ -2294,7 +2340,7 @@ function POForm({
           )}
           {pasteOpen && (
             <div className="modal-overlay" onClick={() => setPasteOpen(false)}>
-              <div className="modal-card paste-modal" onClick={(e) => e.stopPropagation()}>
+              <div className="modal-card paste-modal" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
                 <h3>Colar linhas do Excel</h3>
                 <p className="muted">
                   No Excel, selecione as células e copie (Ctrl+C). Cole aqui com Ctrl+V.
