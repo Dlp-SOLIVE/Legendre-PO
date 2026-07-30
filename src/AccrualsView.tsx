@@ -118,6 +118,7 @@ export function AccrualsView() {
 
     setDetailLoading(key);
     try {
+      if (!supabase) throw new Error("Cliente Supabase não inicializado. Verifica as variáveis VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY.");
       let query = supabase
         .from("vw_accruals_breakdown")
         .select("line_item_id, item_ref, artigo_descricao, value_received, value_invoiced, accrual_value")
@@ -259,9 +260,9 @@ export function AccrualsView() {
                                     <tr key={d.line_item_id}>
                                       <td>{d.item_ref ?? "—"}</td>
                                       <td>{d.artigo_descricao ?? "—"}</td>
-                                      <td className="num">{money(d.value_received)}</td>
-                                      <td className="num">{money(d.value_invoiced)}</td>
-                                      <td className="num accrual">{money(d.accrual_value)}</td>
+                                      <td className="num">{money(Number(d.value_received ?? 0))}</td>
+                                      <td className="num">{money(Number(d.value_invoiced ?? 0))}</td>
+                                      <td className="num accrual">{money(Number(d.accrual_value ?? 0))}</td>
                                     </tr>
                                   ))}
                                 </tbody>
