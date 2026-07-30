@@ -1439,6 +1439,25 @@ function Dashboard({ purchaseOrders, references }: { purchaseOrders: PurchaseOrd
     status: "",
   });
 
+  const [typeFilter, setTypeFilter] = useState("");
+  const [subFilter, setSubFilter] = useState("");
+
+  const expenseTypes = useMemo(
+    () => [...new Set(references.categories.map((c) => c.expense_type).filter(Boolean))].sort() as string[],
+    [references.categories],
+  );
+  const subcategorias = useMemo(
+    () =>
+      references.categories
+        .filter((c) => !typeFilter || c.expense_type === typeFilter)
+        .map((c) => ({
+          id: c.id,
+          label: (c.category_code ? `${c.category_code} — ${c.category_name}` : c.category_name) ?? "",
+        }))
+        .sort((a, b) => a.label.localeCompare(b.label, "pt")),
+    [references.categories, typeFilter],
+  );
+
   const filtered = useMemo(
     () =>
       purchaseOrders.filter((po) => {
@@ -1447,9 +1466,11 @@ function Dashboard({ purchaseOrders, references }: { purchaseOrders: PurchaseOrd
         if (filters.projectId && po.project_id !== filters.projectId) return false;
         if (filters.supplierId && po.supplier_id !== filters.supplierId) return false;
         if (filters.status && po.status !== filters.status) return false;
+        if (typeFilter && !(po.line_items ?? []).some((l) => l.category?.expense_type === typeFilter)) return false;
+        if (subFilter && !(po.line_items ?? []).some((l) => l.category_id === subFilter)) return false;
         return true;
       }),
-    [filters, purchaseOrders],
+    [filters, purchaseOrders, typeFilter, subFilter],
   );
 
   const total = filtered.reduce((sum, po) => sum + Number(po.grand_total), 0);
@@ -1458,6 +1479,28 @@ function Dashboard({ purchaseOrders, references }: { purchaseOrders: PurchaseOrd
   return (
     <section className="work-section">
       <FilterBar filters={filters} setFilters={setFilters} references={references} />
+      <div className="filters">
+        {expenseTypes.length > 0 && (
+          <label>
+            Tipo de despesa
+            <select value={typeFilter} onChange={(event) => { setTypeFilter(event.target.value); setSubFilter(""); }}>
+              <option value="">Todos os tipos</option>
+              {expenseTypes.map((t) => (
+                <option value={t} key={t}>{t}</option>
+              ))}
+            </select>
+          </label>
+        )}
+        <label>
+          Subcategoria (rubrica)
+          <select value={subFilter} onChange={(event) => setSubFilter(event.target.value)}>
+            <option value="">Todas as subcategorias</option>
+            {subcategorias.map((sc) => (
+              <option value={sc.id} key={sc.id}>{sc.label}</option>
+            ))}
+          </select>
+        </label>
+      </div>
       <div className="kpi-grid">
         <Kpi label="Valor total" value={money(total)} />
         <Kpi label="Adjudicações criadas" value={String(filtered.length)} />
@@ -3036,7 +3079,7 @@ function Exports({ references, purchaseOrders }: { references: ReferenceData; pu
       action: () =>
         downloadCsv(
           "legendre-po-line-items.csv",
-          ["Nº Adjudicação", "Obra", "Fornecedor", "Ref. artigo", "Descrição", "Categoria", "Quantidade", "Unidade", "Preço unitário", "Taxa IVA", "Total da linha"],
+          ["Nº Adjudicação", "Obra", "Fornecedor", "Ref. artigo", "Descrição", "Tipo de despesa", "Código", "Rubrica", "Quantidade", "Unidade", "Preço unitário", "Taxa IVA", "Total da linha"],
           purchaseOrders.flatMap((po) =>
             (po.line_items ?? []).map((line) => [
               po.po_number,
@@ -3044,7 +3087,9 @@ function Exports({ references, purchaseOrders }: { references: ReferenceData; pu
               po.supplier?.supplier_name,
               line.item_ref,
               line.description,
-              formatCategoryLabel(line.category),
+              line.category?.expense_type,
+              line.category?.category_code,
+              line.category?.category_name,
               line.quantity,
               line.unit,
               line.rate,
