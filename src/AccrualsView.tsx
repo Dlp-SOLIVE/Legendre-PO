@@ -16,6 +16,10 @@ function monthLabel(iso: string) {
   return `${MONTH_NAMES[idx] ?? m} ${y}`;
 }
 
+// A view v_accruals_by_project_month também devolve expense_type (tipo de despesa).
+// Alargamos o tipo localmente para o usar sem tocar em types.ts.
+type AccrualRow = AccrualByProjectMonth & { expense_type?: string | null };
+
 // Linha do breakdown por artigo (view vw_accruals_breakdown)
 type AccrualBreakdownRow = {
   line_item_id: string;
@@ -30,14 +34,21 @@ function detailKey(projectId: string, month: string, categoryId: string | null) 
   return `${projectId}__${month}__${categoryId ?? "none"}`;
 }
 
+function subLabel(r: AccrualRow) {
+  return r.category_code
+    ? `${r.category_code} — ${r.category_name ?? ""}`.trim()
+    : (r.category_name ?? "(sem categoria)");
+}
+
 export function AccrualsView() {
-  const [rows, setRows] = useState<AccrualByProjectMonth[]>([]);
+  const [rows, setRows] = useState<AccrualRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const [projectFilter, setProjectFilter] = useState("");
   const [monthFilter, setMonthFilter] = useState("");
-  const [codeFilter, setCodeFilter] = useState("");
+  const [typeFilter, setTypeFilter] = useState("");   // tipo de despesa (expense_type)
+  const [subFilter, setSubFilter] = useState("");     // subcategoria / rubrica (category_id)
 
   // Drill-down por artigo
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -51,7 +62,7 @@ export function AccrualsView() {
       setError(null);
       try {
         const data = await loadAccrualsByProjectMonth();
-        setRows(data as AccrualByProjectMonth[]);
+        setRows(data as AccrualRow[]);
       } catch (err: any) {
         setError(err.message ?? "Erro ao carregar os accruals.");
       } finally {
@@ -69,22 +80,33 @@ export function AccrualsView() {
     () => Array.from(new Set(rows.map((r) => r.month))).sort().reverse(),
     [rows],
   );
-  const codes = useMemo(
-    () => Array.from(new Set(rows.map((r) => r.category_code).filter(Boolean))) as string[],
+  const expenseTypes = useMemo(
+    () => Array.from(new Set(rows.map((r) => r.expense_type).filter(Boolean))).sort() as string[],
     [rows],
   );
+  // Subcategorias (rubricas) — em cascata com o tipo de despesa selecionado.
+  const subcategorias = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const r of rows) {
+      if (!r.category_id) continue;
+      if (typeFilter && r.expense_type !== typeFilter) continue;
+      m.set(r.category_id, subLabel(r));
+    }
+    return Array.from(m.entries()).sort((a, b) => a[1].localeCompare(b[1], "pt"));
+  }, [rows, typeFilter]);
 
   const filtered = rows.filter((r) =>
     (!projectFilter || r.project_id === projectFilter) &&
     (!monthFilter || r.month === monthFilter) &&
-    (!codeFilter || r.category_code === codeFilter),
+    (!typeFilter || r.expense_type === typeFilter) &&
+    (!subFilter || r.category_id === subFilter),
   );
 
   const totalReceived = filtered.reduce((s, r) => s + Number(r.value_received ?? 0), 0);
   const totalInvoiced = filtered.reduce((s, r) => s + Number(r.value_invoiced ?? 0), 0);
   const totalAccrual = filtered.reduce((s, r) => s + Number(r.accrual_value ?? 0), 0);
 
-  async function toggleDetail(r: AccrualByProjectMonth) {
+  async function toggleDetail(r: AccrualRow) {
     const key = detailKey(r.project_id, r.month, r.category_id ?? null);
     if (expanded === key) {
       setExpanded(null);
@@ -120,7 +142,7 @@ export function AccrualsView() {
         <h2>Accruals por obra e mês</h2>
       </div>
       <p className="muted">
-        Custo entregue mas ainda não faturado, por obra, mês e código analítico. Valores ao preço da adjudicação.
+        Custo entregue mas ainda não faturado, por obra, mês e rubrica. Valores ao preço da adjudicação.
         Clica numa linha para ver os artigos que a compõem.
       </p>
 
@@ -134,21 +156,35 @@ export function AccrualsView() {
             ))}
           </select>
         </label>
+        {expenseTypes.length > 0 && (
+          <label>
+            Tipo de despesa
+            <select
+              value={typeFilter}
+              onChange={(e) => { setTypeFilter(e.target.value); setSubFilter(""); }}
+            >
+              <option value="">Todos os tipos</option>
+              {expenseTypes.map((t) => (
+                <option key={t} value={t}>{t}</option>
+              ))}
+            </select>
+          </label>
+        )}
+        <label>
+          Subcategoria (rubrica)
+          <select value={subFilter} onChange={(e) => setSubFilter(e.target.value)}>
+            <option value="">Todas as subcategorias</option>
+            {subcategorias.map(([id, label]) => (
+              <option key={id} value={id}>{label}</option>
+            ))}
+          </select>
+        </label>
         <label>
           Mês
           <select value={monthFilter} onChange={(e) => setMonthFilter(e.target.value)}>
             <option value="">Todos os meses</option>
             {months.map((m) => (
               <option key={m} value={m}>{monthLabel(m)}</option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Código analítico
-          <select value={codeFilter} onChange={(e) => setCodeFilter(e.target.value)}>
-            <option value="">Todos os códigos</option>
-            {codes.map((c) => (
-              <option key={c} value={c}>{c}</option>
             ))}
           </select>
         </label>
