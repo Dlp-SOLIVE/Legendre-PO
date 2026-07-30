@@ -1632,14 +1632,35 @@ function PurchaseOrders({
 }) {
   const [projectFilter, setProjectFilter] = useState("");
   const [requesterFilter, setRequesterFilter] = useState("");
+  const [typeFilter, setTypeFilter] = useState("");   // tipo de despesa (expense_type)
+  const [subFilter, setSubFilter] = useState("");     // subcategoria / rubrica (category_id)
+
+  const expenseTypes = useMemo(
+    () => [...new Set(references.categories.map((c) => c.expense_type).filter(Boolean))].sort() as string[],
+    [references.categories],
+  );
+  const subcategorias = useMemo(
+    () =>
+      references.categories
+        .filter((c) => !typeFilter || c.expense_type === typeFilter)
+        .map((c) => ({
+          id: c.id,
+          label: c.category_code ? `${c.category_code} — ${c.category_name}` : c.category_name,
+        }))
+        .sort((a, b) => a.label.localeCompare(b.label, "pt")),
+    [references.categories, typeFilter],
+  );
+
   const filteredPurchaseOrders = useMemo(
     () =>
       purchaseOrders.filter((po) => {
         if (projectFilter && po.project_id !== projectFilter) return false;
         if (requesterFilter && po.requester_id !== requesterFilter) return false;
+        if (typeFilter && !(po.line_items ?? []).some((l) => (l.category?.expense_type ?? l.expense_type) === typeFilter)) return false;
+        if (subFilter && !(po.line_items ?? []).some((l) => l.category_id === subFilter)) return false;
         return true;
       }),
-    [projectFilter, purchaseOrders, requesterFilter],
+    [projectFilter, purchaseOrders, requesterFilter, typeFilter, subFilter],
   );
 
   return (
@@ -1664,6 +1685,26 @@ function PurchaseOrders({
               <option value={member.id} key={member.id}>
                 {member.initials ? `${member.initials} - ${member.full_name}` : member.full_name}
               </option>
+            ))}
+          </select>
+        </label>
+        {expenseTypes.length > 0 && (
+          <label>
+            Tipo de despesa
+            <select value={typeFilter} onChange={(event) => { setTypeFilter(event.target.value); setSubFilter(""); }}>
+              <option value="">Todos os tipos</option>
+              {expenseTypes.map((t) => (
+                <option value={t} key={t}>{t}</option>
+              ))}
+            </select>
+          </label>
+        )}
+        <label>
+          Subcategoria (rubrica)
+          <select value={subFilter} onChange={(event) => setSubFilter(event.target.value)}>
+            <option value="">Todas as subcategorias</option>
+            {subcategorias.map((s) => (
+              <option value={s.id} key={s.id}>{s.label}</option>
             ))}
           </select>
         </label>
