@@ -1687,4 +1687,10 @@ th {
   margin: 10px 0;
 }
 .variacao-sobe { color: #c0392b; font-weight: 600; }
-.variacao-desce { color: #1a7f3c; font-weight: 600; }
+.variacao-desce { color: #1a7f3c; font-weight: 600; 
+}
+.accrual-row.open { background: #f4f7fb; }
+.accrual-detail-row > td { background: #f9fbfd; padding: 4px 12px 12px; }
+.recon-table.nested { width: 100%; margin: 4px 0; }
+.recon-table.nested th { font-weight: 600; opacity: .75; }
+
