@@ -10,7 +10,7 @@ import {
   ClipboardList,
   Copy,
   Download,
-  Eye,t
+  Eye,
   FilePlus2,
   LogOut,
   Package,
