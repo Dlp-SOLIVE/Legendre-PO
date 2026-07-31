@@ -1937,10 +1937,9 @@ function formatProjectSiteContact(project?: Project | null) {
   return [project.site_contact_name, project.site_contact_phone].filter(Boolean).join(" - ");
 }
 
-const DEFAULT_VEHICLE_REQUIREMENTS = "Vehicle to have accreditation FORS Silver as a minimum.";
-const DEFAULT_OFFLOADING_INSTRUCTIONS = "À mão, durante o horário de entregas na obra.";
-const DEFAULT_DELIVERY_INSTRUCTIONS =
-  "Contactar o responsável da obra 30 minutos antes da chegada. Todos os motoristas devem cumprir as regras da obra e de entrega.";
+const DEFAULT_VEHICLE_REQUIREMENTS = "";
+const DEFAULT_OFFLOADING_INSTRUCTIONS = "";
+const DEFAULT_DELIVERY_INSTRUCTIONS = "";
 
 const PAYMENT_TERMS_OPTIONS = ["Pronto pagamento", "Fatura a 30 dias", "Fatura a 60 dias"];
 const DELIVERY_TIME_OPTIONS = [
