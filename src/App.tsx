@@ -546,12 +546,12 @@ function ProcurementShell({ session }: { session: Session }) {
                 identity="supplier_name"
                 fields={[
                   { name: "supplier_name", label: "Nome do fornecedor", required: true },
-                  { name: "account_code", label: "Código de conta" },
+                  { name: "activity", label: "Atividade" },
                   { name: "contact_name", label: "Nome do contacto" },
                   { name: "email", label: "Email", type: "email" },
                   { name: "phone", label: "Telefone" },
+                  { name: "account_code", label: "Código de conta" },
                   { name: "address", label: "Morada", type: "textarea" },
-                  { name: "activity", label: "Atividade" },
                   { name: "notes", label: "Notas", type: "textarea" },
                   { name: "is_active", label: "Ativo", type: "checkbox" },
                 ]}
