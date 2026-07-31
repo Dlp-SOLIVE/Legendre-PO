@@ -239,42 +239,31 @@ export function AccrualsView() {
                         <td className="num">{money(r.value_invoiced)}</td>
                         <td className="num accrual">{money(r.accrual_value)}</td>
                       </tr>
-                      {isOpen && (
+                      {isOpen && detailLoading === key && (
                         <tr className="accrual-detail-row">
-                          <td colSpan={7}>
-                            {detailLoading === key ? (
-                              <p className="muted">A carregar artigos…</p>
-                            ) : detailError ? (
-                              <p className="notice">{detailError}</p>
-                            ) : detail.length === 0 ? (
-                              <p className="muted">Sem artigos para esta rubrica/mês.</p>
-                            ) : (
-                              <table className="recon-table nested">
-                                <thead>
-                                  <tr>
-                                    <th>Ref.</th>
-                                    <th>Artigo</th>
-                                    <th className="num">Entregue</th>
-                                    <th className="num">Faturado</th>
-                                    <th className="num">Accrual</th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {detail.map((d) => (
-                                    <tr key={d.line_item_id}>
-                                      <td>{d.item_ref ?? "—"}</td>
-                                      <td>{d.artigo_descricao ?? "—"}</td>
-                                      <td className="num">{money(Number(d.value_received ?? 0))}</td>
-                                      <td className="num">{money(Number(d.value_invoiced ?? 0))}</td>
-                                      <td className="num accrual">{money(Number(d.accrual_value ?? 0))}</td>
-                                    </tr>
-                                  ))}
-                                </tbody>
-                              </table>
-                            )}
-                          </td>
+                          <td colSpan={7} className="muted">A carregar artigos…</td>
                         </tr>
                       )}
+                      {isOpen && detailLoading !== key && detailError && (
+                        <tr className="accrual-detail-row">
+                          <td colSpan={7} className="notice">{detailError}</td>
+                        </tr>
+                      )}
+                      {isOpen && detailLoading !== key && !detailError && detail.length === 0 && (
+                        <tr className="accrual-detail-row">
+                          <td colSpan={7} className="muted">Sem artigos para esta rubrica/mês.</td>
+                        </tr>
+                      )}
+                      {isOpen && detailLoading !== key && !detailError && detail.map((d) => (
+                        <tr key={d.line_item_id} className="accrual-detail-row">
+                          <td className="accrual-artigo" colSpan={4}>
+                            ↳ {[d.item_ref, d.artigo_descricao].filter(Boolean).join(" · ") || "—"}
+                          </td>
+                          <td className="num">{money(Number(d.value_received ?? 0))}</td>
+                          <td className="num">{money(Number(d.value_invoiced ?? 0))}</td>
+                          <td className="num accrual">{money(Number(d.accrual_value ?? 0))}</td>
+                        </tr>
+                      ))}
                     </Fragment>
                   );
                 })}
