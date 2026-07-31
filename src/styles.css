@@ -11,7 +11,7 @@
   --line: #ebe8ef;
   --surface: #ffffff;
   --success: #299047;
-  --warning: #cf661b;
+  --warning: #b06f00;
   --danger: #c0392b;
   --radius: 8px;
   --radius-sm: 6px;
@@ -47,7 +47,7 @@ button {
   align-items: center;
   background: var(--red);
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   color: #fff;
   cursor: pointer;
   display: inline-flex;
@@ -81,7 +81,7 @@ select,
 textarea {
   background: #fff;
   border: 1px solid #e3e1e8;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   color: #242329;
   min-height: 40px;
   padding: 9px 10px;
@@ -224,8 +224,8 @@ th {
 .eyebrow {
   color: var(--red);
   font-size: 0.76rem;
-  font-weight: 800;
-  letter-spacing: 0;
+  font-weight: 700;
+  letter-spacing: 0.08em;
   margin: 0 0 4px;
   text-transform: uppercase;
 }
@@ -239,7 +239,7 @@ th {
 }
 
 .role-pill {
-  border-radius: 999px;
+  border-radius: var(--pill);
   color: #fff;
   font-size: 0.75rem;
   font-weight: 800;
@@ -291,7 +291,7 @@ th {
 .login-panel {
   background: #fff;
   border: 1px solid #ebe8ef;
-  border-radius: 8px;
+  border-radius: var(--radius);
   box-shadow: var(--shadow-sm);
 }
 
@@ -340,7 +340,7 @@ th {
 .notice {
   background: #f7f1f4;
   border: 1px solid #eed9e0;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   color: #6b2d3b;
   margin-bottom: 14px;
   padding: 12px;
@@ -355,7 +355,7 @@ th {
 .readonly-field {
   background: #faf9fb;
   border: 1px solid #e6e3ea;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   color: #242329;
   min-height: 42px;
   padding: 9px 10px;
@@ -381,7 +381,7 @@ th {
   align-items: flex-start;
   background: #fff;
   border: 1px solid #ded9e3;
-  border-radius: 8px;
+  border-radius: var(--radius);
   display: flex;
   gap: 10px;
   padding: 12px;
@@ -455,7 +455,7 @@ th {
 
 .project-access-list {
   border: 1px solid #e6e3ea;
-  border-radius: 8px;
+  border-radius: var(--radius);
   display: grid;
   gap: 8px;
   grid-template-columns: repeat(3, minmax(160px, 1fr));
@@ -532,7 +532,7 @@ th {
 
 .bar-row div {
   background: #f0edf3;
-  border-radius: 999px;
+  border-radius: var(--pill);
   height: 10px;
   margin-top: 6px;
   overflow: hidden;
@@ -560,7 +560,7 @@ th {
 
 .status-pill {
   background: #f4f2f6;
-  border-radius: 999px;
+  border-radius: var(--pill);
   color: #605c66;
   display: inline-flex;
   font-size: 0.78rem;
@@ -578,7 +578,7 @@ th {
 .supplier-snapshot {
   background: #faf9fb;
   border: 1px solid #ebe8ef;
-  border-radius: 8px;
+  border-radius: var(--radius);
   flex-wrap: wrap;
   margin: 4px 0 16px;
   padding: 12px;
@@ -606,7 +606,7 @@ th {
 
 .totals-strip {
   background: #2a242b;
-  border-radius: 8px;
+  border-radius: var(--radius);
   color: #fff;
   flex-wrap: wrap;
   justify-content: flex-end;
@@ -635,7 +635,7 @@ th {
 
 .modal-actions {
   background: #fff;
-  border-radius: 8px;
+  border-radius: var(--radius);
   justify-content: flex-end;
   padding: 10px;
   width: min(100%, 940px);
@@ -1317,7 +1317,7 @@ th {
   align-items: center;
   padding: 7px 10px;
   border: 1px solid #e2e8f1;
-  border-radius: 8px;
+  border-radius: var(--radius);
   margin-bottom: 6px;
   font-size: 13px;
 }
@@ -1333,7 +1333,7 @@ th {
   margin: 14px 0;
   padding: 16px;
   border: 1px solid #d7e0ec;
-  border-radius: 12px;
+  border-radius: var(--radius);
   background: #f9fbfd;
 }
 .doc-form h4 {
@@ -1423,7 +1423,7 @@ th {
 .accrual-filters select {
   padding: 8px 10px;
   border: 1px solid #d7dde5;
-  border-radius: 8px;
+  border-radius: var(--radius);
   min-width: 180px;
 }
 .accrual-kpis {
@@ -1436,7 +1436,7 @@ th {
   flex: 1;
   min-width: 160px;
   border: 1px solid #e2e8f1;
-  border-radius: 12px;
+  border-radius: var(--radius);
   padding: 14px 18px;
   background: #f9fafc;
   display: flex;
@@ -1470,19 +1470,19 @@ th {
 /* Lote 4: refaturação — badges de estado */
 .badge-done {
   background: #e3f4e8;
-  color: #1a7f3c;
+  color: var(--success);
   font-size: 11.5px;
   font-weight: 600;
   padding: 3px 10px;
-  border-radius: 20px;
+  border-radius: var(--pill);
 }
 .badge-pending {
   background: #fff3e0;
-  color: #b06f00;
+  color: var(--warning);
   font-size: 11.5px;
   font-weight: 600;
   padding: 3px 10px;
-  border-radius: 20px;
+  border-radius: var(--pill);
 }
 
 /* Total líquido + nota IVA no documento (sem coluna IVA) */
@@ -1542,7 +1542,7 @@ th {
   flex-wrap: wrap;
   background: #eef4fb;
   border: 1px solid #cfe0f2;
-  border-radius: 10px;
+  border-radius: var(--radius);
   padding: 10px 14px;
   margin-bottom: 12px;
   font-size: 13px;
@@ -1555,7 +1555,7 @@ th {
 .batch-apply input {
   padding: 6px 8px;
   border: 1px solid #d7dde5;
-  border-radius: 7px;
+  border-radius: var(--radius-sm);
   font-size: 13px;
 }
 .line-select {
@@ -1563,7 +1563,7 @@ th {
 }
 .line-row-selected {
   background: #f0f6fd;
-  border-radius: 8px;
+  border-radius: var(--radius);
 }
 
 /* Assinatura pré-carregada no "Pela LEGDR" */
@@ -1580,20 +1580,20 @@ th {
 }
 .assinatura-status {
   font-size: 12px;
-  color: #1a7f3c;
+  color: var(--success);
   font-weight: 600;
 }
 
 /* Fluxo de aprovação */
 .approval-modal { max-width: 480px; }
 .approval-modal label { display: flex; flex-direction: column; gap: 6px; margin: 14px 0; font-weight: 600; font-size: 13px; }
-.approval-modal select { padding: 8px 10px; border: 1px solid #d7dde5; border-radius: 8px; font-size: 14px; }
+.approval-modal select { padding: 8px 10px; border: 1px solid #d7dde5; border-radius: var(--radius); font-size: 14px; }
 .approval-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .approve-btn, .return-btn, .reject-btn {
-  padding: 5px 12px; border-radius: 7px; font-size: 12.5px; font-weight: 600; cursor: pointer; border: 1px solid transparent;
+  padding: 5px 12px; border-radius: var(--radius-sm); font-size: 12.5px; font-weight: 600; cursor: pointer; border: 1px solid transparent;
 }
-.approve-btn { background: #e3f4e8; color: #1a7f3c; border-color: #b6e2c4; }
-.return-btn { background: #fff3e0; color: #b06f00; border-color: #f0d9ac; }
+.approve-btn { background: #e3f4e8; color: var(--success); border-color: #b6e2c4; }
+.return-btn { background: #fff3e0; color: var(--warning); border-color: #f0d9ac; }
 .reject-btn { background: #fdecea; color: var(--danger); border-color: #f3c0ba; }
 .approve-btn:hover { background: #d0edd9; }
 .return-btn:hover { background: #ffe9cc; }
@@ -1603,7 +1603,7 @@ th {
 .devolucao-nota {
   display: block;
   font-size: 11px;
-  color: #b06f00;
+  color: var(--warning);
   margin-top: 4px;
   max-width: 240px;
   overflow: hidden;
@@ -1613,7 +1613,7 @@ th {
 .devolucao-nota.rejeitada { color: var(--danger); }
 
 /* Estados novos nas pills */
-.status-pill.pending_approval { background: #fff3e0; color: #b06f00; }
+.status-pill.pending_approval { background: #fff3e0; color: var(--warning); }
 .status-pill.rejected { background: #fdecea; color: var(--danger); }
 
 /* Lote 9 — envio ao fornecedor */
@@ -1622,14 +1622,14 @@ th {
   align-items: center;
   gap: 8px;
   background: #e3f4e8;
-  color: #1a7f3c;
+  color: var(--success);
   font-size: 13px;
   font-weight: 600;
   padding: 6px 12px;
-  border-radius: 8px;
+  border-radius: var(--radius);
 }
 .sent-badge .link-button {
-  color: #1a7f3c;
+  color: var(--success);
   font-size: 12px;
   font-weight: 500;
 }
@@ -1656,24 +1656,24 @@ th {
   font-size: 12.5px;
   padding: 10px;
   border: 1px solid #d7dde5;
-  border-radius: 8px;
+  border-radius: var(--radius);
   margin-top: 10px;
   resize: vertical;
 }
 .paste-resumo {
   margin: 12px 0 6px;
   font-size: 13.5px;
-  color: #1a7f3c;
+  color: var(--success);
 }
 .paste-aviso {
-  color: #b06f00;
+  color: var(--warning);
   font-weight: 600;
 }
 .paste-preview {
   max-height: 320px;
   overflow-y: auto;
   border: 1px solid #e2e8f1;
-  border-radius: 8px;
+  border-radius: var(--radius);
 }
 .paste-preview .recon-table {
   font-size: 12.5px;
@@ -1689,7 +1689,7 @@ th {
   width: 96px;
   padding: 5px 7px;
   border: 1px solid #d7dde5;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   font-size: 12.5px;
   text-align: right;
   font-variant-numeric: tabular-nums;
@@ -1699,12 +1699,12 @@ th {
   box-sizing: border-box;
   padding: 8px 10px;
   border: 1px solid #d7dde5;
-  border-radius: 8px;
+  border-radius: var(--radius);
   font-size: 13px;
   margin: 10px 0;
 }
 .variacao-sobe { color: var(--danger); font-weight: 600; }
-.variacao-desce { color: #1a7f3c; font-weight: 600; 
+.variacao-desce { color: var(--success); font-weight: 600; 
 }
 .accrual-row.open { background: #f4f7fb; }
 .accrual-detail-row > td { background: #f9fbfd; padding: 4px 12px 12px; }
@@ -1753,7 +1753,7 @@ th.sortable:hover { color: var(--red); }
 /* 7. Toasts de feedback (aparecem e desaparecem sozinhos) */
 .toast-stack { position: fixed; right: 18px; bottom: 18px; display: grid; gap: 8px; z-index: 1200; }
 .toast {
-  background: #242329; color: #fff; padding: 10px 14px; border-radius: 8px;
+  background: #242329; color: #fff; padding: 10px 14px; border-radius: var(--radius);
   box-shadow: 0 8px 24px rgba(0,0,0,.18); font-size: .9rem; max-width: 340px;
   animation: toast-in .18s ease-out;
 }
@@ -1763,3 +1763,6 @@ th.sortable:hover { color: var(--red); }
 
 /* 8. Modal acessível */
 .modal-card:focus { outline: none; }
+
+/* Acento à esquerda no item de menu ativo */
+.nav-item.active { box-shadow: inset 3px 0 0 var(--red); }
