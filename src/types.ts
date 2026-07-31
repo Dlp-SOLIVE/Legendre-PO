@@ -11,6 +11,7 @@ export type Supplier = {
   address: string | null;
   vat_number: string | null;
   notes: string | null;
+  activity: string | null;
   is_active: boolean;
   created_at?: string;
   updated_at?: string;
