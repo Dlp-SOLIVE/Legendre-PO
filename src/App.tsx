@@ -1103,7 +1103,7 @@ function AdminPanel<T extends { id: string; is_active?: boolean } & Record<strin
       )}
       <DataTable
         rows={rows}
-        columns={fields.slice(0, 5).map((field) => ({ key: field.name, label: field.label }))}
+        columns={fields.filter((field) => field.name !== "is_active").slice(0, 5).map((field) => ({ key: field.name, label: field.label }))}
         identity={identity}
         onEdit={allowEdit ? (row) => setEditing(row) : undefined}
         onDelete={allowDelete ? (row) => remove(row.id) : undefined}
