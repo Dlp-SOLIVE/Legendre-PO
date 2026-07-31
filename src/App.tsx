@@ -551,6 +551,7 @@ function ProcurementShell({ session }: { session: Session }) {
                   { name: "email", label: "Email", type: "email" },
                   { name: "phone", label: "Telefone" },
                   { name: "address", label: "Morada", type: "textarea" },
+                  { name: "activity", label: "Atividade" },
                   { name: "notes", label: "Notas", type: "textarea" },
                   { name: "is_active", label: "Ativo", type: "checkbox" },
                 ]}
