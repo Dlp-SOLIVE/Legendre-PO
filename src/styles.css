@@ -13,6 +13,9 @@
   --success: #299047;
   --warning: #b06f00;
   --danger: #c0392b;
+  --success-text: #227a3b;
+  --warning-text: #965e00;
+  --red-text: #c41d2d;
   --radius: 8px;
   --radius-sm: 6px;
   --pill: 999px;
@@ -91,7 +94,7 @@ textarea {
 input:focus,
 select:focus,
 textarea:focus {
-  border-color: var(--red);
+  border-color: var(--red-text);
   box-shadow: 0 0 0 3px rgba(230, 35, 54, 0.16);
   outline: none;
 }
@@ -222,7 +225,7 @@ th {
 }
 
 .eyebrow {
-  color: var(--red);
+  color: var(--red-text);
   font-size: 0.76rem;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -241,7 +244,7 @@ th {
 .role-pill {
   border-radius: var(--pill);
   color: #fff;
-  font-size: 0.75rem;
+  font-size: 0.8rem;
   font-weight: 800;
   padding: 5px 9px;
   text-transform: uppercase;
@@ -367,7 +370,7 @@ th {
 }
 
 .readonly-field span {
-  color: #817d87;
+  color: var(--muted);
   font-size: 0.82rem;
 }
 
@@ -399,7 +402,7 @@ th {
 }
 
 .tick-box small {
-  color: #817d87;
+  color: var(--muted);
   font-size: 0.82rem;
   margin-top: 3px;
 }
@@ -551,7 +554,7 @@ th {
 }
 
 .muted {
-  color: #817d87;
+  color: var(--muted);
 }
 
 .status-select {
@@ -598,7 +601,7 @@ th {
 }
 
 .line-header {
-  color: #817d87;
+  color: var(--muted);
   font-size: 0.76rem;
   font-weight: 900;
   text-transform: uppercase;
@@ -662,7 +665,7 @@ th {
 }
 
 .po-logo {
-  color: var(--red);
+  color: var(--red-text);
   font-size: 28px;
   font-weight: 900;
   letter-spacing: 0;
@@ -909,7 +912,7 @@ th {
 }
 
 .export-button svg {
-  color: var(--red);
+  color: var(--red-text);
 }
 
 .export-button span {
@@ -917,7 +920,7 @@ th {
 }
 
 .export-button small {
-  color: #817d87;
+  color: var(--muted);
 }
 
 @media (max-width: 1100px) {
@@ -1303,7 +1306,7 @@ th {
 }
 .flag-warn {
   color: #bf8f00;
-  font-size: 11.5px;
+  font-size: 12px;
   font-weight: 600;
 }
 .doc-list {
@@ -1470,16 +1473,16 @@ th {
 /* Lote 4: refaturação — badges de estado */
 .badge-done {
   background: #e3f4e8;
-  color: var(--success);
-  font-size: 11.5px;
+  color: var(--success-text);
+  font-size: 12px;
   font-weight: 600;
   padding: 3px 10px;
   border-radius: var(--pill);
 }
 .badge-pending {
   background: #fff3e0;
-  color: var(--warning);
-  font-size: 11.5px;
+  color: var(--warning-text);
+  font-size: 12px;
   font-weight: 600;
   padding: 3px 10px;
   border-radius: var(--pill);
@@ -1580,7 +1583,7 @@ th {
 }
 .assinatura-status {
   font-size: 12px;
-  color: var(--success);
+  color: var(--success-text);
   font-weight: 600;
 }
 
@@ -1592,8 +1595,8 @@ th {
 .approve-btn, .return-btn, .reject-btn {
   padding: 5px 12px; border-radius: var(--radius-sm); font-size: 12.5px; font-weight: 600; cursor: pointer; border: 1px solid transparent;
 }
-.approve-btn { background: #e3f4e8; color: var(--success); border-color: #b6e2c4; }
-.return-btn { background: #fff3e0; color: var(--warning); border-color: #f0d9ac; }
+.approve-btn { background: #e3f4e8; color: var(--success-text); border-color: #b6e2c4; }
+.return-btn { background: #fff3e0; color: var(--warning-text); border-color: #f0d9ac; }
 .reject-btn { background: #fdecea; color: var(--danger); border-color: #f3c0ba; }
 .approve-btn:hover { background: #d0edd9; }
 .return-btn:hover { background: #ffe9cc; }
@@ -1603,7 +1606,7 @@ th {
 .devolucao-nota {
   display: block;
   font-size: 11px;
-  color: var(--warning);
+  color: var(--warning-text);
   margin-top: 4px;
   max-width: 240px;
   overflow: hidden;
@@ -1613,7 +1616,7 @@ th {
 .devolucao-nota.rejeitada { color: var(--danger); }
 
 /* Estados novos nas pills */
-.status-pill.pending_approval { background: #fff3e0; color: var(--warning); }
+.status-pill.pending_approval { background: #fff3e0; color: var(--warning-text); }
 .status-pill.rejected { background: #fdecea; color: var(--danger); }
 
 /* Lote 9 — envio ao fornecedor */
@@ -1622,14 +1625,14 @@ th {
   align-items: center;
   gap: 8px;
   background: #e3f4e8;
-  color: var(--success);
+  color: var(--success-text);
   font-size: 13px;
   font-weight: 600;
   padding: 6px 12px;
   border-radius: var(--radius);
 }
 .sent-badge .link-button {
-  color: var(--success);
+  color: var(--success-text);
   font-size: 12px;
   font-weight: 500;
 }
@@ -1663,10 +1666,10 @@ th {
 .paste-resumo {
   margin: 12px 0 6px;
   font-size: 13.5px;
-  color: var(--success);
+  color: var(--success-text);
 }
 .paste-aviso {
-  color: var(--warning);
+  color: var(--warning-text);
   font-weight: 600;
 }
 .paste-preview {
@@ -1704,7 +1707,7 @@ th {
   margin: 10px 0;
 }
 .variacao-sobe { color: var(--danger); font-weight: 600; }
-.variacao-desce { color: var(--success); font-weight: 600; 
+.variacao-desce { color: var(--success-text); font-weight: 600; 
 }
 .accrual-row.open { background: #f4f7fb; }
 .accrual-detail-row > td { background: #f9fbfd; padding: 4px 12px 12px; }
@@ -1739,7 +1742,7 @@ button:focus-visible,
 
 /* 4. Cabeçalhos de tabela ordenáveis */
 th.sortable { cursor: pointer; user-select: none; }
-th.sortable:hover { color: var(--red); }
+th.sortable:hover { color: var(--red-text); }
 .sort-ind { margin-left: 4px; opacity: .55; font-size: .85em; }
 
 /* 5. Estado vazio com ação */
