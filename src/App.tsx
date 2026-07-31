@@ -1,5 +1,5 @@
 import type React from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import {
   Archive,
@@ -10,7 +10,7 @@ import {
   ClipboardList,
   Copy,
   Download,
-  Eye,
+  Eye,t
   FilePlus2,
   LogOut,
   Package,
@@ -126,6 +126,19 @@ function statusLabel(status: PurchaseOrderStatus): string {
   }
 }
 
+function useEscape(active: boolean, onEscape: () => void) {
+  const cb = useRef(onEscape);
+  cb.current = onEscape;
+  useEffect(() => {
+    if (!active) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") cb.current();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [active]);
+}
+
 export function App() {
   const [session, setSession] = useState<Session | null>(null);
   const [authReady, setAuthReady] = useState(false);
@@ -168,6 +181,26 @@ function ProcurementShell({ session }: { session: Session }) {
   const [error, setError] = useState<string | null>(null);
   const [editingPurchaseOrder, setEditingPurchaseOrder] = useState<PurchaseOrder | null>(null);
   const [approvalPo, setApprovalPo] = useState<PurchaseOrder | null>(null); // ADJ a submeter para aprovação
+  const [confirmState, setConfirmState] = useState<{ text: string; resolve: (ok: boolean) => void } | null>(null);
+  const [toasts, setToasts] = useState<{ id: number; text: string; kind: "success" | "error" }[]>([]);
+
+  const askConfirm = (text: string) =>
+    new Promise<boolean>((resolve) => setConfirmState({ text, resolve }));
+  const resolveConfirm = (ok: boolean) => {
+    confirmState?.resolve(ok);
+    setConfirmState(null);
+  };
+  const pushToast = (text: string, kind: "success" | "error" = "success") => {
+    const id = Date.now() + Math.random();
+    setToasts((prev) => [...prev, { id, text, kind }]);
+    window.setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 3500);
+  };
+
+  useEscape(!!confirmState, () => resolveConfirm(false));
+  useEscape(!!approvalPo, () => {
+    setApprovalPo(null);
+    setChosenApprover("");
+  });
   const [chosenApprover, setChosenApprover] = useState("");
   const [previewPurchaseOrder, setPreviewPurchaseOrder] = useState<PurchaseOrder | null>(null);
 
@@ -221,13 +254,14 @@ function ProcurementShell({ session }: { session: Session }) {
       return;
     }
 
-    const confirmed = window.confirm(`Validar a adjudicação ${po.po_number}? Fica bloqueada para edição.`);
+    const confirmed = await askConfirm(`Validar a adjudicação ${po.po_number}? Fica bloqueada para edição.`);
     if (!confirmed) return;
 
     setError(null);
     try {
       await validatePurchaseOrder(po.id);
       await refresh();
+      pushToast(`Adjudicação ${po.po_number} validada.`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Não foi possível validar a adjudicação.");
     }
@@ -256,6 +290,7 @@ function ProcurementShell({ session }: { session: Session }) {
       setApprovalPo(null);
       setChosenApprover("");
       await refresh();
+      pushToast("Submetido para aprovação.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Não foi possível submeter para aprovação.");
     }
@@ -274,11 +309,12 @@ function ProcurementShell({ session }: { session: Session }) {
       }
       comment = input.trim();
     } else {
-      if (!window.confirm(`Aprovar a adjudicação ${po.po_number}?`)) return;
+      if (!(await askConfirm(`Aprovar a adjudicação ${po.po_number}?`))) return;
     }
     try {
       await decideApproval(po.id, action, comment);
       await refresh();
+      pushToast(`Decisão registada (${po.po_number}).`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Não foi possível concluir a decisão.");
     }
@@ -290,13 +326,14 @@ function ProcurementShell({ session }: { session: Session }) {
       setError("Só a pessoa que criou este rascunho de adjudicação o pode eliminar.");
       return;
     }
-    const confirmed = window.confirm(`Eliminar a adjudicação em rascunho ${po.po_number}? Esta ação não pode ser anulada.`);
+    const confirmed = await askConfirm(`Eliminar a adjudicação em rascunho ${po.po_number}? Esta ação não pode ser anulada.`);
     if (!confirmed) return;
 
     setError(null);
     try {
       await deletePurchaseOrder(po.id, currentStaff.id);
       await refresh();
+      pushToast(`Rascunho ${po.po_number} eliminado.`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Não foi possível eliminar a adjudicação.");
     }
@@ -620,6 +657,24 @@ function ProcurementShell({ session }: { session: Session }) {
           </div>
         )}
       </main>
+      {confirmState && (
+        <div className="modal-overlay" onClick={() => resolveConfirm(false)}>
+          <div className="modal-card" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
+            <p>{confirmState.text}</p>
+            <div className="modal-actions">
+              <button className="secondary" onClick={() => resolveConfirm(false)}>Cancelar</button>
+              <button autoFocus onClick={() => resolveConfirm(true)}>Confirmar</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {toasts.length > 0 && (
+        <div className="toast-stack" aria-live="polite">
+          {toasts.map((t) => (
+            <div key={t.id} className={`toast ${t.kind}`}>{t.text}</div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
