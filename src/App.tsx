@@ -574,6 +574,7 @@ function ProcurementShell({ session }: { session: Session }) {
                   { name: "adj_code", label: "Código ADJ (3 letras, ex: URB)" },
                   { name: "site_address", label: "Morada da obra", type: "textarea" },
                   { name: "cost_centre_code", label: "Código de centro de custo" },
+                  { name: "invoice_project_code", label: "Código de obra na fatura" },
                   { name: "site_contact_name", label: "Nome do contacto na obra" },
                   { name: "site_contact_phone", label: "Telefone do contacto na obra" },
                   { name: "default_vehicle_requirements", label: "Requisitos de veículo (por defeito)", type: "textarea" },
@@ -2012,7 +2013,7 @@ function POForm({
   const [form, setForm] = useState({
     po_date: editingPurchaseOrder?.po_date ?? isoToday(),
     payment_terms: editingPurchaseOrder?.payment_terms ?? "Fatura a 30 dias",
-    invoice_project_code: editingPurchaseOrder?.invoice_project_code ?? "",
+    invoice_project_code: editingPurchaseOrder?.invoice_project_code ?? initialProject?.invoice_project_code ?? "",
     delivery_date: editingPurchaseOrder?.delivery_date ?? "",
     delivery_time: editingPurchaseOrder?.delivery_time ?? "",
     delivery_address:
@@ -2168,6 +2169,7 @@ function POForm({
     setForm((current) => ({
       ...current,
       delivery_address: nextProject?.default_delivery_address || nextProject?.site_address || current.delivery_address,
+      invoice_project_code: nextProject?.invoice_project_code || current.invoice_project_code,
       site_contact: formatProjectSiteContact(nextProject) || current.site_contact,
       vehicle_requirements: nextProject?.default_vehicle_requirements || DEFAULT_VEHICLE_REQUIREMENTS,
       offloading_instructions: nextProject?.default_offloading_instructions || DEFAULT_OFFLOADING_INSTRUCTIONS,
@@ -2696,7 +2698,7 @@ function PreviewModal({ po, settings, onClose, canWrite, currentStaff, onRefresh
       currentStaff?.full_name ?? "",
       (company.legal_name as string) ?? "LEGDR Engenharia e Construção, Unipessoal Lda",
     ].join("\r\n");
-    window.location.href = `mailto:${supplierEmail}?cc=${encodeURIComponent(po.requester?.email ?? "")}&subject=${encodeURIComponent(assunto)}&body=${encodeURIComponent(corpo)}`;
+    window.location.href = `mailto:${supplierEmail}?subject=${encodeURIComponent(assunto)}&body=${encodeURIComponent(corpo)}`;
   }
 
   async function alternarEnviada(enviada: boolean) {
