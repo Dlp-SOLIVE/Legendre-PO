@@ -254,7 +254,7 @@ function ProcurementShell({ session }: { session: Session }) {
       return;
     }
 
-    const confirmed = await askConfirm(`Validar a adjudicação ${po.po_number}? Fica bloqueada para edição.`);
+    const confirmed = await askConfirm(`Validar a adjudicação ${po.po_number}? Fica pronta a enviar; se precisar, pode voltar a editá-la depois.`);
     if (!confirmed) return;
 
     setError(null);
@@ -478,7 +478,13 @@ function ProcurementShell({ session }: { session: Session }) {
                 currentStaff={currentStaff}
                 purchaseOrders={purchaseOrders}
                 references={references}
-                onEdit={(po) => {
+                onEdit={async (po) => {
+                  if (po.status === "validated") {
+                    const ok = await askConfirm(
+                      `A adjudicação ${po.po_number} já está validada. Ao guardar, as alterações substituem o documento — reveja antes de (re)enviar ao fornecedor. Se já registou guias ou faturas nesta adjudicação, confirme-as depois. Continuar a editar?`,
+                    );
+                    if (!ok) return;
+                  }
                   setEditingPurchaseOrder(po);
                   setView("new-po");
                 }}
@@ -577,6 +583,7 @@ function ProcurementShell({ session }: { session: Session }) {
                   { name: "invoice_project_code", label: "Código de obra na fatura" },
                   { name: "site_contact_name", label: "Nome do contacto na obra" },
                   { name: "site_contact_phone", label: "Telefone do contacto na obra" },
+                  { name: "default_site_contacts", label: "Contactos na obra (predefinidos — um por linha, ex: João Silva (encarregado) - 937 128 143)", type: "textarea" },
                   { name: "default_vehicle_requirements", label: "Requisitos de veículo (por defeito)", type: "textarea" },
                   { name: "default_offloading_instructions", label: "Instruções de descarga (por defeito)", type: "textarea" },
                   { name: "default_delivery_instructions", label: "Instruções de entrega (por defeito)", type: "textarea" },
@@ -1893,7 +1900,7 @@ function PurchaseOrders({
                     <button className="icon-button" onClick={() => onPreview(po)} title="Pré-visualizar" aria-label="Pré-visualizar">
                       <Eye size={16} />
                     </button>
-                    <button className="icon-button" disabled={!canWrite || po.status !== "draft"} onClick={() => onEdit(po)} title="Editar rascunho" aria-label="Editar rascunho">
+                    <button className="icon-button" disabled={!canWrite || (po.status !== "draft" && po.status !== "validated")} onClick={() => onEdit(po)} title={po.status === "validated" ? "Editar adjudicação validada" : "Editar rascunho"} aria-label="Editar adjudicação">
                       <Pencil size={16} />
                     </button>
                     <button className="icon-button" disabled={!canWrite || po.status !== "draft"} onClick={() => onValidate(po)} title="Validar adjudicação" aria-label="Validar adjudicação">
@@ -2009,7 +2016,7 @@ function POForm({
     currentStaff?.initials ||
     initialsFromName(editingPurchaseOrder?.requester?.full_name ?? currentStaff?.full_name);
   const initialProject = references.projects.find((item) => item.id === projectId) ?? activeProjects[0] ?? null;
-  const defaultSiteContact = formatProjectSiteContact(initialProject);
+  const defaultSiteContact = initialProject?.default_site_contacts || formatProjectSiteContact(initialProject);
   const [form, setForm] = useState({
     po_date: editingPurchaseOrder?.po_date ?? isoToday(),
     payment_terms: editingPurchaseOrder?.payment_terms ?? "Fatura a 30 dias",
@@ -2170,7 +2177,7 @@ function POForm({
       ...current,
       delivery_address: nextProject?.default_delivery_address || nextProject?.site_address || current.delivery_address,
       invoice_project_code: nextProject?.invoice_project_code || current.invoice_project_code,
-      site_contact: formatProjectSiteContact(nextProject) || current.site_contact,
+      site_contact: nextProject?.default_site_contacts || formatProjectSiteContact(nextProject) || current.site_contact,
       vehicle_requirements: nextProject?.default_vehicle_requirements || DEFAULT_VEHICLE_REQUIREMENTS,
       offloading_instructions: nextProject?.default_offloading_instructions || DEFAULT_OFFLOADING_INSTRUCTIONS,
       delivery_instructions: nextProject?.default_delivery_instructions || DEFAULT_DELIVERY_INSTRUCTIONS,
