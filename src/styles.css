@@ -1587,6 +1587,38 @@ th {
   font-weight: 600;
 }
 
+/* ─── Impressão / PDF: impedir cortes de imagens e blocos entre páginas ───
+   Mantém o formato vetorial atual (Guardar como PDF) mas garante que nenhuma
+   imagem (logótipo, assinatura/carimbo) nem bloco fechado é partido a meio numa
+   mudança de página — se não couber na página, passa inteiro para a seguinte. */
+@media print {
+  .print-area img {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  /* Blocos do documento que devem ficar sempre inteiros */
+  .po-header,
+  .po-meta-grid,
+  .po-info-grid,
+  .po-bottom-grid,
+  .po-notes-block,
+  .po-analytic-footer,
+  .po-analytic-table,
+  .po-clausulas-header,
+  .po-clausulas li {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  /* Assinaturas: o bloco e cada assinatura (com imagem) nunca são cortados */
+  .po-signatures,
+  .po-sign-block {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+}
+
 /* Fluxo de aprovação */
 .approval-modal { max-width: 480px; }
 .approval-modal label { display: flex; flex-direction: column; gap: 6px; margin: 14px 0; font-weight: 600; font-size: 13px; }
