@@ -2695,9 +2695,9 @@ function PreviewModal({ po, settings, onClose, canWrite, currentStaff, onRefresh
       "Agradecemos a devolução do documento devidamente assinado.",
       "",
       "Com os melhores cumprimentos,",
-      currentStaff?.full_name ?? "",
-      (company.legal_name as string) ?? "LEGDR Engenharia e Construção, Unipessoal Lda",
     ].join("\r\n");
+    // Nota: a assinatura (nome + empresa) é deixada de fora do corpo de propósito —
+    // o Outlook acrescenta automaticamente a assinatura do utilizador ao criar a mensagem.
     window.location.href = `mailto:${supplierEmail}?subject=${encodeURIComponent(assunto)}&body=${encodeURIComponent(corpo)}`;
   }
 
@@ -2723,7 +2723,10 @@ function PreviewModal({ po, settings, onClose, canWrite, currentStaff, onRefresh
   function printPurchaseOrder() {
     const previousTitle = document.title;
     const cleanPoNumber = po.po_number.replace(/[\\/:*?"<>|]+/g, "-");
-    document.title = `${cleanPoNumber} - Nota de Encomenda Legendre`;
+    // O browser usa o título do documento como nome sugerido do PDF.
+    // Incluir também o nome do fornecedor. Ex.: "ADJ_URB.2026-120 - Odifercol Materiais de Construção, Lda"
+    const supplierName = (po.supplier?.supplier_name ?? "").replace(/[\\/:*?"<>|]+/g, "-").trim();
+    document.title = supplierName ? `${cleanPoNumber} - ${supplierName}` : cleanPoNumber;
 
     const restoreTitle = () => {
       document.title = previousTitle;
