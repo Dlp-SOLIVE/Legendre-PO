@@ -271,6 +271,8 @@ export async function createPurchaseOrder(draft: PurchaseOrderDraft) {
     quantity: item.quantity,
     unit: item.unit,
     rate: item.rate,
+    discount_pct: item.discount_pct ?? 0,
+    discount_pct_2: item.discount_pct_2 ?? 0,
     vat_rate: item.vat_rate,
     category_id: item.category_id,
   }));
@@ -305,6 +307,8 @@ export async function updatePurchaseOrder(id: string, draft: PurchaseOrderDraft)
     quantity: item.quantity,
     unit: item.unit,
     rate: item.rate,
+    discount_pct: item.discount_pct ?? 0,
+    discount_pct_2: item.discount_pct_2 ?? 0,
     vat_rate: item.vat_rate,
     category_id: item.category_id,
   }));
