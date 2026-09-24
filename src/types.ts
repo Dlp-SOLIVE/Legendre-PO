@@ -101,6 +101,7 @@ export type PurchaseOrderLineItem = {
 export type PurchaseOrder = {
   id: string;
   po_number: string;
+  revision?: number | null;
   project_id: string;
   supplier_id: string;
   requester_id: string | null;
@@ -142,6 +143,16 @@ export type PurchaseOrder = {
   requester?: StaffMember | null;
   category?: CostCategory | null;
   line_items?: PurchaseOrderLineItem[];
+};
+
+export type PurchaseOrderRevision = {
+  id: string;
+  purchase_order_id: string;
+  revision: number;
+  reason: string | null;
+  created_by: string | null;
+  created_at: string;
+  staff: { full_name: string } | null;
 };
 
 export type DeliveryNoteLine = {
