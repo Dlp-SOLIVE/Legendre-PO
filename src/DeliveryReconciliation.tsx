@@ -11,6 +11,7 @@ import {
   getAnexoUrl,
 } from "./lib/data";
 import { money, shortDate, isoToday } from "./lib/format";
+import { confirmDialog } from "./lib/dialog";
 import type {
   PurchaseOrder,
   DeliveryNote,
@@ -167,7 +168,7 @@ export function DeliveryReconciliation({ purchaseOrder, canWrite }: Props) {
                     {n.attachment_url && <AnexoLink path={n.attachment_url} />}
                     {canWrite && (
                       <button className="link-button danger" onClick={async () => {
-                        if (window.confirm("Eliminar esta guia?")) {
+                        if (await confirmDialog("Eliminar esta guia? As quantidades recebidas deixam de contar para o accrual.")) {
                           await deleteDeliveryNote(n.id);
                           await refresh();
                         }
@@ -194,7 +195,7 @@ export function DeliveryReconciliation({ purchaseOrder, canWrite }: Props) {
                     {i.attachment_url && <AnexoLink path={i.attachment_url} />}
                     {canWrite && (
                       <button className="link-button danger" onClick={async () => {
-                        if (window.confirm("Eliminar esta fatura?")) {
+                        if (await confirmDialog("Eliminar esta fatura?")) {
                           await deleteSupplierInvoice(i.id);
                           await refresh();
                         }
