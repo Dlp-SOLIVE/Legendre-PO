@@ -1,5 +1,5 @@
 import type React from "react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import {
   Archive,
@@ -31,6 +31,8 @@ import {
   ClipboardPaste,
   Tags,
   Truck,
+  Bell,
+  Menu,
 } from "lucide-react";
 import {
   createPurchaseOrder,
@@ -65,6 +67,7 @@ import {
 import { downloadCsv } from "./lib/csv";
 import { parseExcelLines } from "./lib/excel";
 import { hasSupabaseConfig, supabase } from "./lib/supabase";
+import { confirmDialog, onConfirmRequest } from "./lib/dialog";
 import { isoToday, lineNet, lineNetRaw, money, shortDate } from "./lib/format";
 import { DeliveryReconciliation } from "./DeliveryReconciliation";
 import { AccrualsView } from "./AccrualsView";
@@ -110,6 +113,12 @@ type NavItem = {
   icon: typeof BarChart3;
   disabled?: boolean;
 };
+
+const NAV_GROUPS: { title: string; keys: ViewKey[] }[] = [
+  { title: "Compras", keys: ["dashboard", "purchase-orders", "new-po", "receive", "approvals", "price-lists"] },
+  { title: "Controlo", keys: ["accruals", "reinvoicing", "exports"] },
+  { title: "Administração", keys: ["suppliers", "projects", "staff", "categories", "settings"] },
+];
 
 const emptyReferences: ReferenceData = {
   suppliers: [],
@@ -182,6 +191,42 @@ function findCategory(list: CostCategory[], typed: string): CostCategory | undef
       `${name} (${code})` === t
     );
   });
+}
+
+const ROLE_LABELS: Record<string, string> = {
+  admin: "Administrador",
+  user: "Utilizador",
+  standard: "Utilizador",
+  viewer: "Só leitura",
+};
+
+type AppNotice = {
+  id: string;
+  text: string;
+  when: string;
+  po: PurchaseOrder;
+  target: "approvals" | "preview";
+};
+
+// Estado guardado na sessão do browser: os filtros mantêm-se ao mudar de separador
+function useSessionState<T>(key: string, initial: T): [T, (value: T) => void] {
+  const [value, setValue] = useState<T>(() => {
+    try {
+      const raw = window.sessionStorage.getItem(key);
+      return raw !== null ? (JSON.parse(raw) as T) : initial;
+    } catch {
+      return initial;
+    }
+  });
+  const set = (next: T) => {
+    setValue(next);
+    try {
+      window.sessionStorage.setItem(key, JSON.stringify(next));
+    } catch {
+      // sem armazenamento de sessão: o filtro só dura até mudar de separador
+    }
+  };
+  return [value, set];
 }
 
 function useEscape(active: boolean, onEscape: () => void) {
@@ -262,6 +307,16 @@ function ProcurementShell({ session }: { session: Session }) {
   const [chosenApprover, setChosenApprover] = useState("");
   const [previewPurchaseOrder, setPreviewPurchaseOrder] = useState<PurchaseOrder | null>(null);
   const [receivePoId, setReceivePoId] = useState<string | null>(null);
+  const [decision, setDecision] = useState<{ po: PurchaseOrder; action: "return" | "reject" } | null>(null);
+  const [decisionComment, setDecisionComment] = useState("");
+  const [noticesOpen, setNoticesOpen] = useState(false);
+  const [lastSeen, setLastSeen] = useState("");
+  const [navOpen, setNavOpen] = useState(false);
+
+  // Confirmações pedidas por outros ecrãs (guias, faturas, preçário, administração)
+  useEffect(() => onConfirmRequest((request) => setConfirmState(request)), []);
+  useEscape(!!decision, () => setDecision(null));
+  useEscape(noticesOpen, () => setNoticesOpen(false));
   const [listPreset, setListPreset] = useState<ListPreset>(null);
   const [delivered, setDelivered] = useState<Record<string, number>>({});
 
@@ -366,23 +421,18 @@ function ProcurementShell({ session }: { session: Session }) {
     }
   }
 
-  async function handleDecideApproval(po: PurchaseOrder, action: "approve" | "return" | "reject") {
+  async function handleDecideApproval(po: PurchaseOrder, action: "approve" | "return" | "reject", comment?: string) {
     setError(null);
-    let comment: string | undefined;
-    if (action === "return" || action === "reject") {
-      const label = action === "return" ? "devolver" : "rejeitar";
-      const input = window.prompt(`Comentário para ${label} a adjudicação ${po.po_number} (obrigatório):`);
-      if (input === null) return; // cancelou
-      if (input.trim() === "") {
-        setError("O comentário é obrigatório.");
-        return;
-      }
-      comment = input.trim();
-    } else {
-      if (!(await askConfirm(`Aprovar a adjudicação ${po.po_number}?`))) return;
+    if ((action === "return" || action === "reject") && !comment) {
+      // abre a janela do comentário (obrigatório)
+      setDecisionComment("");
+      setDecision({ po, action });
+      return;
     }
+    if (action === "approve" && !(await askConfirm(`Aprovar a adjudicação ${po.po_number}?`))) return;
     try {
       await decideApproval(po.id, action, comment);
+      setDecision(null);
       await refresh();
       pushToast(`Decisão registada (${po.po_number}).`);
     } catch (err) {
@@ -471,6 +521,70 @@ function ProcurementShell({ session }: { session: Session }) {
   const myPendingApprovals = purchaseOrders.filter(
     (po) => po.status === "pending_approval" && (po.approver_id === currentStaff?.id || canAdmin),
   );
+  // Avisos dentro da aplicação (sem email): calculados a partir das adjudicações
+  const myId = currentStaff?.id ?? null;
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString();
+  const notices: AppNotice[] = [
+    ...myPendingApprovals.map((po) => ({
+      id: `ap-${po.id}`,
+      text: `Para aprovar: ${po.po_number} · ${money(po.grand_total)} c/ IVA`,
+      when: po.submitted_for_approval_at ?? po.updated_at ?? "",
+      po,
+      target: "approvals" as const,
+    })),
+    ...purchaseOrders
+      .filter((po) => myId && po.requester_id === myId && po.status === "draft" && po.approval_comment)
+      .map((po) => ({
+        id: `ret-${po.id}`,
+        text: `Devolvida: ${po.po_number} — ${po.approval_comment ?? ""}`,
+        when: po.updated_at ?? "",
+        po,
+        target: "preview" as const,
+      })),
+    ...purchaseOrders
+      .filter((po) => myId && po.requester_id === myId && po.status === "rejected" && (po.updated_at ?? "") > thirtyDaysAgo)
+      .map((po) => ({
+        id: `rej-${po.id}`,
+        text: `Rejeitada: ${po.po_number}${po.approval_comment ? ` — ${po.approval_comment}` : ""}`,
+        when: po.updated_at ?? "",
+        po,
+        target: "preview" as const,
+      })),
+    ...purchaseOrders
+      .filter((po) => myId && po.requester_id === myId && po.status === "validated" && po.approver_id && (po.validated_at ?? "") > thirtyDaysAgo)
+      .map((po) => ({
+        id: `ok-${po.id}`,
+        text: `Aprovada: ${po.po_number} — já pode enviar ao fornecedor`,
+        when: po.validated_at ?? "",
+        po,
+        target: "preview" as const,
+      })),
+  ]
+    .sort((x, y) => y.when.localeCompare(x.when))
+    .slice(0, 20);
+  const unreadNotices = notices.filter((n) => n.when && n.when > lastSeen).length;
+  const lastSeenKey = `adj_avisos_vistos_${myId ?? "anon"}`;
+  useEffect(() => {
+    try {
+      setLastSeen(window.localStorage.getItem(lastSeenKey) ?? "");
+    } catch {
+      setLastSeen("");
+    }
+  }, [lastSeenKey]);
+  function openNotices() {
+    const next = !noticesOpen;
+    setNoticesOpen(next);
+    if (next) {
+      const now = new Date().toISOString();
+      try {
+        window.localStorage.setItem(lastSeenKey, now);
+      } catch {
+        // sem armazenamento local: o contador volta a aparecer ao recarregar
+      }
+      window.setTimeout(() => setLastSeen(now), 4000);
+    }
+  }
+
   const navItems: NavItem[] = [
     { key: "dashboard", label: "Dashboard", icon: BarChart3 },
     { key: "purchase-orders", label: "Adjudicações", icon: ClipboardList },
@@ -495,8 +609,26 @@ function ProcurementShell({ session }: { session: Session }) {
           <img className="brand-logo" src={legendreLogo} alt="Legendre" />
           <span>Sistema de Compras</span>
         </div>
-        <nav>
-          {navItems.map((item) => {
+        <button
+          type="button"
+          className="secondary nav-toggle"
+          onClick={() => setNavOpen((open) => !open)}
+          aria-expanded={navOpen}
+          aria-label="Menu"
+        >
+          <Menu size={18} />
+          {navItems.find((item) => item.key === view)?.label ?? "Menu"}
+        </button>
+        <nav className={navOpen ? "open" : "collapsed"}>
+          {NAV_GROUPS.map((group) => {
+            const items = group.keys
+              .map((key) => navItems.find((item) => item.key === key))
+              .filter((item): item is NavItem => Boolean(item) && !item?.disabled);
+            if (!items.length) return null;
+            return (
+              <Fragment key={group.title}>
+                <p className="nav-group">{group.title}</p>
+          {items.map((item) => {
             const Icon = item.icon;
             return (
               <button
@@ -508,12 +640,16 @@ function ProcurementShell({ session }: { session: Session }) {
                   if (item.key === "receive") setReceivePoId(null);
                   if (item.key === "purchase-orders") setListPreset(null);
                   setView(item.key);
+                  setNavOpen(false);
                 }}
                 title={item.disabled ? "Acesso de administrador necessário" : item.label}
               >
                 <Icon size={18} />
                 {item.label}
               </button>
+            );
+          })}
+              </Fragment>
             );
           })}
         </nav>
@@ -526,7 +662,84 @@ function ProcurementShell({ session }: { session: Session }) {
             <h1>{navItems.find((item) => item.key === view)?.label}</h1>
           </div>
           <div className="user-strip">
-            <span className={`role-pill ${role}`}>{role}</span>
+            <div style={{ position: "relative" }}>
+              <button className="icon-button" onClick={openNotices} title="Avisos" aria-label={`Avisos (${unreadNotices} novos)`} aria-expanded={noticesOpen}>
+                <Bell size={18} />
+                {unreadNotices > 0 && (
+                  <span
+                    style={{
+                      position: "absolute",
+                      top: -4,
+                      right: -4,
+                      minWidth: 18,
+                      height: 18,
+                      padding: "0 4px",
+                      borderRadius: 999,
+                      background: "var(--red, #e62336)",
+                      color: "#fff",
+                      fontSize: 11,
+                      fontWeight: 700,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    {unreadNotices}
+                  </span>
+                )}
+              </button>
+              {noticesOpen && (
+                <div
+                  role="dialog"
+                  aria-label="Avisos"
+                  style={{
+                    position: "absolute",
+                    right: 0,
+                    top: "calc(100% + 8px)",
+                    width: 340,
+                    maxHeight: 420,
+                    overflow: "auto",
+                    background: "#fff",
+                    border: "1px solid var(--line, #e4e6eb)",
+                    borderRadius: 12,
+                    boxShadow: "0 12px 32px rgba(20, 58, 103, 0.14)",
+                    zIndex: 50,
+                    padding: 6,
+                  }}
+                >
+                  {notices.length === 0 && <p className="muted" style={{ padding: 10, margin: 0 }}>Sem avisos.</p>}
+                  {notices.map((n) => (
+                    <button
+                      key={n.id}
+                      type="button"
+                      onClick={() => {
+                        setNoticesOpen(false);
+                        if (n.target === "approvals") setView("approvals");
+                        else setPreviewPurchaseOrder(n.po);
+                      }}
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: 2,
+                        width: "100%",
+                        textAlign: "left",
+                        background: n.when > lastSeen ? "#f0f6fd" : "transparent",
+                        color: "inherit",
+                        border: "none",
+                        borderRadius: 8,
+                        padding: "8px 10px",
+                        cursor: "pointer",
+                        fontWeight: 400,
+                      }}
+                    >
+                      <span>{n.text}</span>
+                      <small className="muted">{shortDate(n.when)}</small>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            <span className={`role-pill ${role}`}>{ROLE_LABELS[role] ?? role}</span>
             <span>{currentStaff?.full_name ?? session.user.email}</span>
             <button className="icon-button" onClick={refresh} title="Atualizar dados">
               <RefreshCw size={18} />
@@ -604,7 +817,8 @@ function ProcurementShell({ session }: { session: Session }) {
                       </thead>
                       <tbody>
                         {myPendingApprovals.map((po) => (
-                          <tr key={po.id}>
+                          <Fragment key={po.id}>
+                          <tr>
                             <td>{po.po_number}</td>
                             <td>{po.project?.project_name ?? "—"}</td>
                             <td>{po.supplier?.supplier_name ?? "—"}</td>
@@ -620,6 +834,21 @@ function ProcurementShell({ session }: { session: Session }) {
                               <button className="reject-btn" onClick={() => handleDecideApproval(po, "reject")}>Rejeitar</button>
                             </td>
                           </tr>
+                          <tr className="approval-context">
+                            <td colSpan={6} className="muted" style={{ fontSize: "0.85rem", paddingTop: 0 }}>
+                              {po.requester?.authority_limit != null
+                                ? `Excede o limite de ${po.requester?.full_name ?? "quem pediu"} (${money(po.requester?.authority_limit ?? 0)} c/ IVA). `
+                                : "Quem pediu não tem limite definido. "}
+                              {po.delivery_date ? `Entrega pedida: ${shortDate(po.delivery_date)}. ` : ""}
+                              {[...(po.line_items ?? [])]
+                                .sort((x, y) => lineNet(y) - lineNet(x))
+                                .slice(0, 3)
+                                .map((l) => `${l.description} (${l.quantity} ${l.unit}, ${money(lineNet(l))})`)
+                                .join(" · ")}
+                              {(po.line_items?.length ?? 0) > 3 ? ` · +${(po.line_items?.length ?? 0) - 3} linhas` : ""}
+                            </td>
+                          </tr>
+                          </Fragment>
                         ))}
                       </tbody>
                     </table>
@@ -742,6 +971,35 @@ function ProcurementShell({ session }: { session: Session }) {
             onRefresh={refresh}
           />
         )}
+        {decision && (
+          <div className="modal-overlay" onClick={() => setDecision(null)}>
+            <div className="modal-card approval-modal" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
+              <h3>{decision.action === "return" ? "Devolver para corrigir" : "Rejeitar adjudicação"}</h3>
+              <p>
+                <strong>{decision.po.po_number}</strong> · {decision.po.supplier?.supplier_name ?? "—"} · {money(decision.po.grand_total)} c/ IVA
+              </p>
+              <label>
+                {decision.action === "return" ? "O que é preciso corrigir? (obrigatório)" : "Motivo da rejeição (obrigatório)"}
+                <textarea
+                  autoFocus
+                  rows={4}
+                  value={decisionComment}
+                  onChange={(event) => setDecisionComment(event.target.value)}
+                  placeholder={decision.action === "return" ? "ex.: falta o preçário do fornecedor para o betão" : "ex.: fornecedor não aprovado para esta obra"}
+                />
+              </label>
+              <div className="modal-actions">
+                <button className="secondary" onClick={() => setDecision(null)}>Cancelar</button>
+                <button
+                  disabled={decisionComment.trim() === ""}
+                  onClick={() => handleDecideApproval(decision.po, decision.action, decisionComment.trim())}
+                >
+                  {decision.action === "return" ? "Devolver" : "Rejeitar"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
         {approvalPo && (
           <div className="modal-overlay" onClick={() => { setApprovalPo(null); setChosenApprover(""); }}>
             <div className="modal-card approval-modal" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
@@ -803,7 +1061,7 @@ function SetupScreen() {
   return (
     <FullScreenMessage
       title="Ligar o Supabase para começar"
-      detail="Create a .env file from .env.example with VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY, then run the Supabase migration."
+      detail="Faltam as variáveis VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY no ambiente de build (Netlify → Site configuration → Environment variables)."
     />
   );
 }
@@ -833,12 +1091,12 @@ function PendingAccessScreen({
       <h2>Acesso pendente</h2>
       <p>
         {staff
-          ? `${staff.full_name} is registered, but an admin still needs to activate the account and assign project access.`
-          : `No staff access request was found for ${email}. Ask an admin to add or approve your staff record.`}
+          ? `O pedido de ${staff.full_name} foi recebido. Um administrador vai ativar a conta e atribuir as obras — depois disso, basta voltar a entrar.`
+          : `Não encontrámos um pedido de acesso para ${email}. Peça a um administrador que crie ou aprove o seu registo na Equipa.`}
       </p>
       <button className="secondary" onClick={onSignOut}>
         <LogOut size={16} />
-        Sign out
+        Terminar sessão
       </button>
     </div>
   );
@@ -892,12 +1150,12 @@ function ResetPasswordScreen({ onDone }: { onDone: () => void }) {
         {updated ? (
           <button type="button" onClick={returnToSignIn}>
             <Check size={16} />
-            Back to sign in
+            Voltar a entrar
           </button>
         ) : (
           <form className="login-form" onSubmit={updatePassword}>
             <label>
-              New password
+              Nova palavra-passe
               <input
                 required
                 minLength={6}
@@ -907,7 +1165,7 @@ function ResetPasswordScreen({ onDone }: { onDone: () => void }) {
               />
             </label>
             <label>
-              Confirm new password
+              Confirmar nova palavra-passe
               <input
                 required
                 minLength={6}
@@ -918,7 +1176,7 @@ function ResetPasswordScreen({ onDone }: { onDone: () => void }) {
             </label>
             <button disabled={busy || !newPassword || !confirmPassword} type="submit">
               <Save size={16} />
-              Update password
+              Atualizar palavra-passe
             </button>
           </form>
         )}
@@ -1154,7 +1412,7 @@ function AdminPanel<T extends { id: string; is_active?: boolean } & Record<strin
   }
 
   async function remove(id: string) {
-    if (!confirm("Eliminar este registo? Adjudicações existentes podem impedir a eliminação.")) return;
+    if (!(await confirmDialog("Eliminar este registo? Adjudicações existentes podem impedir a eliminação."))) return;
     try {
       await onDelete(id);
       await onRefresh();
@@ -1232,6 +1490,17 @@ function AdminPanel<T extends { id: string; is_active?: boolean } & Record<strin
   );
 }
 
+// Dados da empresa que aparecem no cabeçalho e rodapé de todas as adjudicações
+const COMPANY_FIELDS: { key: string; label: string; type?: string; wide?: boolean }[] = [
+  { key: "name", label: "Nome comercial" },
+  { key: "legal_name", label: "Razão social", wide: true },
+  { key: "vat_number", label: "NIF" },
+  { key: "phone", label: "Telefone" },
+  { key: "address", label: "Morada", wide: true },
+  { key: "email", label: "Email geral", type: "email" },
+  { key: "accounts_email", label: "Email para faturas", type: "email" },
+];
+
 function SettingsPanel({
   settings,
   onSave,
@@ -1244,14 +1513,26 @@ function SettingsPanel({
   const [editing, setEditing] = useState<AppSetting | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const isCompany = editing?.setting_key === "company";
+
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     try {
+      let value: Record<string, unknown>;
+      if (isCompany) {
+        // dados da empresa: campos normais (mantém outras chaves que já existam)
+        value = { ...(editing?.setting_value ?? {}) };
+        COMPANY_FIELDS.forEach((field) => {
+          value[field.key] = String(form.get(`company_${field.key}`) ?? "").trim();
+        });
+      } else {
+        value = JSON.parse(String(form.get("setting_value") || "{}"));
+      }
       await onSave({
         setting_key: String(form.get("setting_key")),
         description: String(form.get("description") ?? ""),
-        setting_value: JSON.parse(String(form.get("setting_value") || "{}")),
+        setting_value: value,
       });
       setEditing(null);
       await onRefresh();
@@ -1280,13 +1561,26 @@ function SettingsPanel({
             <input name="setting_key" required defaultValue={editing.setting_key} readOnly={Boolean(editing.created_at)} />
           </label>
           <label className="wide">
-            Description
+            Descrição
             <input name="description" defaultValue={editing.description ?? ""} />
           </label>
-          <label className="wide">
-            JSON value
-            <textarea name="setting_value" rows={8} defaultValue={JSON.stringify(editing.setting_value, null, 2)} />
-          </label>
+          {isCompany ? (
+            COMPANY_FIELDS.map((field) => (
+              <label key={field.key} className={field.wide ? "wide" : ""}>
+                {field.label}
+                <input
+                  name={`company_${field.key}`}
+                  type={field.type ?? "text"}
+                  defaultValue={String((editing.setting_value as Record<string, unknown>)[field.key] ?? "")}
+                />
+              </label>
+            ))
+          ) : (
+            <label className="wide">
+              Valor (JSON — só para utilizadores avançados)
+              <textarea name="setting_value" rows={8} defaultValue={JSON.stringify(editing.setting_value, null, 2)} />
+            </label>
+          )}
           <div className="button-row wide">
             <button type="submit">
               <Save size={16} />
@@ -1303,7 +1597,7 @@ function SettingsPanel({
         rows={settings.map((setting) => ({ ...setting, id: setting.setting_key }))}
         identity="setting_key"
         columns={[
-          { key: "setting_key", label: "Key" },
+          { key: "setting_key", label: "Chave" },
           { key: "description", label: "Descrição" },
         ]}
         onEdit={(row) => setEditing(row)}
@@ -1403,7 +1697,7 @@ function StaffAdminView({
 
   async function remove(id: string) {
     if (!canAdmin) return;
-    if (!confirm("Eliminar este membro da equipa?")) return;
+    if (!(await confirmDialog("Eliminar este membro da equipa?"))) return;
     try {
       await deleteRow("staff_members", id);
       await onRefresh();
@@ -1582,8 +1876,8 @@ function DataTable<T extends Record<string, unknown>>({
               <td>{row.is_active === false ? "Inativo" : "Ativo"}</td>
               <td className="actions-cell">
                 {onEdit && (
-                  <button className="icon-button" onClick={() => onEdit(row)} title="Editar">
-                    <Save size={16} />
+                  <button className="icon-button" onClick={() => onEdit(row)} title="Editar" aria-label="Editar">
+                    <Pencil size={16} />
                   </button>
                 )}
                 {onDelete && (
@@ -1744,7 +2038,11 @@ function Dashboard({
         <SpendPanel title="Custo por obra" rows={groupSpend(filtered, (po) => po.project?.project_name ?? "Sem atribuição")} />
         <SpendPanel title="Custo por fornecedor" rows={groupSpend(filtered, (po) => po.supplier?.supplier_name ?? "Sem atribuição")} />
         <SpendPanel title="Custo por categoria" rows={groupLineSpend(filtered)} />
-        <RecentOrders purchaseOrders={filtered.slice(0, 8)} />
+        <RecentOrders
+          purchaseOrders={[...filtered]
+            .sort((x, y) => String(y.po_date).localeCompare(String(x.po_date)) || String(y.created_at ?? "").localeCompare(String(x.created_at ?? "")))
+            .slice(0, 8)}
+        />
       </div>
     </section>
   );
@@ -1876,7 +2174,10 @@ function RecentOrders({ purchaseOrders }: { purchaseOrders: PurchaseOrder[] }) {
         {purchaseOrders.map((po) => (
           <div key={po.id}>
             <strong>{po.po_number}</strong>
-            <span>{po.supplier?.supplier_name ?? "Fornecedor"} · {money(po.grand_total)}</span>
+            <span>
+              {shortDate(po.po_date)} · {po.supplier?.supplier_name ?? "Fornecedor"} · {money(po.subtotal)} ·{" "}
+              <span className={`status-pill ${po.status}`}>{statusLabel(po.status)}</span>
+            </span>
           </div>
         ))}
         {!purchaseOrders.length && <p className="muted">Sem adjudicações recentes.</p>}
@@ -1914,10 +2215,10 @@ function PurchaseOrders({
   onPreview: (po: PurchaseOrder) => void;
   onValidate: (po: PurchaseOrder) => void;
 }) {
-  const [projectFilter, setProjectFilter] = useState("");
-  const [requesterFilter, setRequesterFilter] = useState("");
-  const [typeFilter, setTypeFilter] = useState("");   // tipo de despesa (expense_type)
-  const [subFilter, setSubFilter] = useState("");     // subcategoria / rubrica (category_id)
+  const [projectFilter, setProjectFilter] = useSessionState("adj_lista_obra", "");
+  const [requesterFilter, setRequesterFilter] = useSessionState("adj_lista_criado_por", "");
+  const [typeFilter, setTypeFilter] = useSessionState("adj_lista_tipo", "");   // tipo de despesa (expense_type)
+  const [subFilter, setSubFilter] = useSessionState("adj_lista_rubrica", "");     // subcategoria / rubrica (category_id)
 
   const expenseTypes = useMemo(
     () => [...new Set(references.categories.map((c) => c.expense_type).filter(Boolean))].sort() as string[],
@@ -1935,8 +2236,8 @@ function PurchaseOrders({
     [references.categories, typeFilter],
   );
 
-  const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState<PurchaseOrderStatus | "">("");
+  const [searchTerm, setSearchTerm] = useSessionState("adj_lista_pesquisa", "");
+  const [statusFilter, setStatusFilter] = useSessionState<PurchaseOrderStatus | "">("adj_lista_estado", "");
   const today = isoToday();
   const statusCounts = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -3420,7 +3721,18 @@ const clausulasAdjudicacao = [
 ];
 
 
-function Exports({ references, purchaseOrders }: { references: ReferenceData; purchaseOrders: PurchaseOrder[] }) {
+function Exports({ references, purchaseOrders: allPurchaseOrders }: { references: ReferenceData; purchaseOrders: PurchaseOrder[] }) {
+  const [projectId, setProjectId] = useState("");
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+  const [status, setStatus] = useState("");
+  const purchaseOrders = allPurchaseOrders.filter(
+    (po) =>
+      (!projectId || po.project_id === projectId) &&
+      (!from || po.po_date >= from) &&
+      (!to || po.po_date <= to) &&
+      (!status || po.status === status),
+  );
   const exports = [
     {
       label: "Lista de fornecedores",
@@ -3482,7 +3794,7 @@ function Exports({ references, purchaseOrders }: { references: ReferenceData; pu
             po.po_date,
             po.delivery_date,
             po.delivery_time,
-            po.status,
+            statusLabel(po.status),
             po.project?.project_name,
             po.supplier?.supplier_name,
             po.subtotal,
@@ -3512,7 +3824,7 @@ function Exports({ references, purchaseOrders }: { references: ReferenceData; pu
               line.unit,
               line.rate,
               line.vat_rate,
-              line.line_total,
+              lineNet(line),
             ]),
           ),
         ),
@@ -3520,7 +3832,40 @@ function Exports({ references, purchaseOrders }: { references: ReferenceData; pu
   ];
 
   return (
-    <section className="work-section export-grid">
+    <section className="work-section">
+      <p className="muted">
+        Ficheiros CSV preparados para o Excel em português (separador «;», decimais com vírgula, datas dd/mm/aaaa).
+        Os filtros aplicam-se ao histórico de adjudicações e de linhas: {purchaseOrders.length} adjudicação(ões).
+      </p>
+      <div className="filters">
+        <label>
+          Obra
+          <select value={projectId} onChange={(event) => setProjectId(event.target.value)}>
+            <option value="">Todas as obras</option>
+            {references.projects.map((project) => (
+              <option value={project.id} key={project.id}>{project.project_name}</option>
+            ))}
+          </select>
+        </label>
+        <label>
+          De
+          <input type="date" value={from} onChange={(event) => setFrom(event.target.value)} />
+        </label>
+        <label>
+          Até
+          <input type="date" value={to} onChange={(event) => setTo(event.target.value)} />
+        </label>
+        <label>
+          Estado
+          <select value={status} onChange={(event) => setStatus(event.target.value)}>
+            <option value="">Todos os estados</option>
+            {statuses.map((s) => (
+              <option value={s} key={s}>{statusLabel(s)}</option>
+            ))}
+          </select>
+        </label>
+      </div>
+    <div className="export-grid">
       {exports.map((item) => (
         <button key={item.filename} onClick={item.action} className="export-button">
           <Download size={18} />
@@ -3528,6 +3873,7 @@ function Exports({ references, purchaseOrders }: { references: ReferenceData; pu
           <small>{item.filename}</small>
         </button>
       ))}
+    </div>
     </section>
   );
 }
