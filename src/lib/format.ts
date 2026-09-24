@@ -5,9 +5,12 @@ export function money(value: number | null | undefined) {
   }).format(Number(value ?? 0));
 }
 
+// Aceita "2026-09-24" ou um carimbo completo ("2026-09-24T10:12:00Z"); antes, um carimbo completo dava data inválida.
 export function shortDate(value: string | null | undefined) {
   if (!value) return "";
-  return new Intl.DateTimeFormat("pt-PT").format(new Date(`${value}T00:00:00`));
+  const date = new Date(`${String(value).slice(0, 10)}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return "";
+  return new Intl.DateTimeFormat("pt-PT").format(date);
 }
 
 // Data de hoje na hora local (toISOString usa UTC e, perto da meia-noite, dava o dia anterior)
@@ -37,9 +40,10 @@ export function lineNetRaw(line: LineLike): number {
   );
 }
 
-// Total líquido de uma linha gravada: usa o valor calculado na base de dados, se existir.
+// Total líquido de uma linha gravada, sempre calculado a partir dos campos (com os dois descontos),
+// arredondado ao cêntimo. Não depende de a coluna line_total da base de dados incluir os descontos.
 export function lineNet(line: LineLike): number {
-  return line.line_total != null ? Number(line.line_total) : lineNetRaw(line);
+  return Math.round(lineNetRaw(line) * 100) / 100;
 }
 
 export function toNumber(value: FormDataEntryValue | null, fallback = 0) {
