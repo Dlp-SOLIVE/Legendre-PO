@@ -2,6 +2,7 @@ import { Fragment, useEffect, useMemo, useState } from "react";
 import { loadAccrualsByProjectMonth } from "./lib/data";
 import { supabase } from "./lib/supabase";
 import { money } from "./lib/format";
+import { downloadCsv } from "./lib/csv";
 import type { AccrualByProjectMonth } from "./types";
 
 const MONTH_NAMES = [
@@ -59,8 +60,11 @@ export function AccrualsView() {
       setLoading(true);
       setError(null);
       try {
-        const data = await loadAccrualsByProjectMonth();
-        setRows(data as AccrualRow[]);
+        const data = (await loadAccrualsByProjectMonth()) as AccrualRow[];
+        setRows(data);
+        // por defeito, o mês mais recente (o do fecho)
+        const latest = data.map((r) => r.month).sort().reverse()[0];
+        if (latest) setMonthFilter((current) => current || latest);
       } catch (err: any) {
         setError(err.message ?? "Erro ao carregar os accruals.");
       } finally {
@@ -102,6 +106,38 @@ export function AccrualsView() {
   const totalInvoiced = filtered.reduce((s, r) => s + Number(r.value_invoiced ?? 0), 0);
   const totalAccrual = filtered.reduce((s, r) => s + Number(r.accrual_value ?? 0), 0);
 
+  // ordenar por obra e mês para mostrar subtotais por obra × mês
+  const ordered = [...filtered].sort(
+    (x, y) => x.project_name.localeCompare(y.project_name, "pt") || y.month.localeCompare(x.month),
+  );
+  const groupKey = (r: AccrualRow) => `${r.project_id}__${r.month}`;
+  const groupTotals = new Map<string, { n: number; received: number; invoiced: number; accrual: number }>();
+  ordered.forEach((r) => {
+    const g = groupTotals.get(groupKey(r)) ?? { n: 0, received: 0, invoiced: 0, accrual: 0 };
+    g.n += 1;
+    g.received += Number(r.value_received ?? 0);
+    g.invoiced += Number(r.value_invoiced ?? 0);
+    g.accrual += Number(r.accrual_value ?? 0);
+    groupTotals.set(groupKey(r), g);
+  });
+
+  function exportCsv() {
+    downloadCsv(
+      `accruals${monthFilter ? "-" + monthFilter : ""}.csv`,
+      ["Obra", "Mês", "Tipo de despesa", "Código", "Rubrica", "Entregue", "Faturado", "Accrual"],
+      ordered.map((r) => [
+        r.project_name,
+        monthLabel(r.month),
+        r.expense_type ?? "",
+        r.category_code ?? "",
+        r.category_name ?? "",
+        Number(r.value_received ?? 0),
+        Number(r.value_invoiced ?? 0),
+        Number(r.accrual_value ?? 0),
+      ]),
+    );
+  }
+
   async function toggleDetail(r: AccrualRow) {
     const key = detailKey(r.project_id, r.month, r.category_id ?? null);
     if (expanded === key) {
@@ -137,6 +173,9 @@ export function AccrualsView() {
     <section className="work-section">
       <div className="section-heading">
         <h2>Accruals por obra e mês</h2>
+        <button type="button" className="secondary" onClick={exportCsv} disabled={filtered.length === 0}>
+          Exportar (Excel)
+        </button>
       </div>
       <p className="muted">
         Custo entregue mas ainda não faturado, por obra, mês e rubrica. Valores ao preço da adjudicação.
@@ -212,7 +251,7 @@ export function AccrualsView() {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((r, i) => {
+                {ordered.map((r, i) => {
                   const key = detailKey(r.project_id, r.month, r.category_id ?? null);
                   const isOpen = expanded === key;
                   const detail = detailCache[key] ?? [];
@@ -264,6 +303,19 @@ export function AccrualsView() {
                           <td className="num accrual">{money(Number(d.accrual_value ?? 0))}</td>
                         </tr>
                       ))}
+                      {(() => {
+                        const g = groupTotals.get(groupKey(r));
+                        const next = ordered[i + 1];
+                        if (!g || g.n < 2 || (next && groupKey(next) === groupKey(r))) return null;
+                        return (
+                          <tr className="accrual-subtotal">
+                            <td colSpan={4}><strong>Subtotal {r.project_name} · {monthLabel(r.month)}</strong></td>
+                            <td className="num"><strong>{money(g.received)}</strong></td>
+                            <td className="num"><strong>{money(g.invoiced)}</strong></td>
+                            <td className="num accrual"><strong>{money(g.accrual)}</strong></td>
+                          </tr>
+                        );
+                      })()}
                     </Fragment>
                   );
                 })}
