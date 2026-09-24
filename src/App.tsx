@@ -52,6 +52,8 @@ import {
   decideApproval,
   loadPriceItems,
   loadDeliveredByPo,
+  loadPoRevisions,
+  revisePurchaseOrder,
   markSentToSupplier,
   unmarkSentToSupplier,
   upsertCategory,
@@ -71,6 +73,7 @@ import { PriceListView } from "./PriceListView";
 import { ReceiveMaterialView } from "./ReceiveMaterialView";
 import legendreLogo from "./assets/legendre-logo.png";
 import type {
+  PurchaseOrderRevision,
   AppRole,
   AppSetting,
   CostCategory,
@@ -159,6 +162,26 @@ function matchesPreset(
     default:
       return true;
   }
+}
+
+// Etiqueta de subcategoria: "código — nome" (permite procurar pelo código)
+function catLabel(cat: CostCategory): string {
+  return cat.category_code ? `${cat.category_code} — ${cat.category_name}` : cat.category_name;
+}
+
+function findCategory(list: CostCategory[], typed: string): CostCategory | undefined {
+  const t = typed.trim().toLowerCase();
+  if (!t) return undefined;
+  return list.find((cat) => {
+    const code = (cat.category_code ?? "").toLowerCase();
+    const name = (cat.category_name ?? "").toLowerCase();
+    return (
+      catLabel(cat).toLowerCase() === t ||
+      (code !== "" && code === t) ||
+      name === t ||
+      `${name} (${code})` === t
+    );
+  });
 }
 
 function useEscape(active: boolean, onEscape: () => void) {
@@ -542,7 +565,7 @@ function ProcurementShell({ session }: { session: Session }) {
                 onEdit={async (po) => {
                   if (po.status === "validated") {
                     const ok = await askConfirm(
-                      `A adjudicação ${po.po_number} já está validada. Ao guardar, as alterações substituem o documento — reveja antes de (re)enviar ao fornecedor. Se já registou guias ou faturas nesta adjudicação, confirme-as depois. Continuar a editar?`,
+                      `A adjudicação ${po.po_number} já está validada. Ao guardar, é criada uma nova revisão (a versão atual fica no histórico) e terá de a reenviar ao fornecedor. Linhas com guias ou faturas registadas não podem ser removidas. Continuar?`,
                     );
                     if (!ok) return;
                   }
@@ -1938,7 +1961,8 @@ function PurchaseOrders({
         if (subFilter && !(po.line_items ?? []).some((l) => l.category_id === subFilter)) return false;
         if (searchTerm) {
           const q = searchTerm.toLowerCase();
-          const hay = `${po.po_number ?? ""} ${po.supplier?.supplier_name ?? ""} ${po.project?.project_name ?? ""}`.toLowerCase();
+          const artigos = (po.line_items ?? []).map((l) => `${l.item_ref ?? ""} ${l.description}`).join(" ");
+          const hay = `${po.po_number ?? ""} ${po.supplier?.supplier_name ?? ""} ${po.project?.project_name ?? ""} ${artigos}`.toLowerCase();
           if (!hay.includes(q)) return false;
         }
         return true;
@@ -1977,7 +2001,7 @@ function PurchaseOrders({
       <div className="list-search">
         <input
           type="search"
-          placeholder="Pesquisar por nº, fornecedor ou obra…"
+          placeholder="Pesquisar por nº, fornecedor, obra ou artigo…"
           value={searchTerm}
           onChange={(event) => setSearchTerm(event.target.value)}
           aria-label="Pesquisar adjudicações"
@@ -2256,6 +2280,7 @@ function POForm({
   const [lines, setLines] = useState<PurchaseOrderLineDraft[]>([
     ...(editingPurchaseOrder?.line_items?.length
       ? editingPurchaseOrder.line_items.map((line, index) => ({
+          id: line.id,
           sort_order: index + 1,
           item_ref: line.item_ref ?? "",
           description: line.description,
@@ -2276,6 +2301,8 @@ function POForm({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [showLineErrors, setShowLineErrors] = useState(false);
+  const isRevision = editingPurchaseOrder?.status === "validated";
+  const [revisionReason, setRevisionReason] = useState("");
   const validateAfterSave = useRef(false);
   const missingCategoryCount = lines.filter((line) => line.description.trim() && !line.category_id).length;
   const canValidateAfterSave = !editingPurchaseOrder || editingPurchaseOrder.status === "draft";
@@ -2384,10 +2411,7 @@ function POForm({
       if (batchField === "discount_pct") return { ...line, discount_pct: Number(batchValue) };
       if (batchField === "discount_pct_2") return { ...line, discount_pct_2: Number(batchValue) };
       if (batchField === "category") {
-        const chosen = activeCategories.find((cat) => {
-          const label = cat.category_code ? `${cat.category_name} (${cat.category_code})` : cat.category_name;
-          return label === batchValue;
-        });
+        const chosen = findCategory(activeCategories, batchValue);
         if (chosen) return { ...line, category_id: chosen.id, expense_type: chosen.expense_type ?? "" };
       }
       return line;
@@ -2470,7 +2494,12 @@ function POForm({
       setBusy(true);
       let savedPurchaseOrderId = editingPurchaseOrder?.id;
       if (editingPurchaseOrder) {
-        await updatePurchaseOrder(editingPurchaseOrder.id, draft);
+        if (isRevision) {
+          // adjudicação validada: nova revisão (a versão atual fica no histórico)
+          await revisePurchaseOrder(editingPurchaseOrder.id, draft, revisionReason);
+        } else {
+          await updatePurchaseOrder(editingPurchaseOrder.id, draft);
+        }
       } else {
         savedPurchaseOrderId = await createPurchaseOrder(draft);
       }
@@ -2486,15 +2515,30 @@ function POForm({
     <section className="work-section">
       <form onSubmit={submit}>
         {error && <div className="notice error">{error}</div>}
-        {editingPurchaseOrder && (
+        {editingPurchaseOrder && !isRevision && (
           <div className="notice">
-            A editar a adjudicação <strong>{editingPurchaseOrder.po_number}</strong>. Ao guardar, a adjudicação existente é atualizada e as linhas são substituídas.
+            A editar o rascunho <strong>{editingPurchaseOrder.po_number}</strong>. Ao guardar, o rascunho é atualizado.
           </div>
         )}
+        {editingPurchaseOrder && isRevision && (
+          <div className="notice">
+            <p style={{ margin: "0 0 8px" }}>
+              Está a rever a adjudicação validada <strong>{editingPurchaseOrder.po_number}</strong>
+              {editingPurchaseOrder.revision ? ` (Rev. ${editingPurchaseOrder.revision})` : ""}. Ao guardar, fica{" "}
+              <strong>Rev. {(editingPurchaseOrder.revision ?? 0) + 1}</strong>, a versão atual passa para o histórico e a adjudicação volta a «Por enviar».
+              Fornecedor e obra não se alteram numa revisão.
+            </p>
+            <label style={{ display: "block" }}>
+              Motivo da revisão <small className="muted">(fica no histórico)</small>
+              <input value={revisionReason} onChange={(event) => setRevisionReason(event.target.value)} placeholder="ex.: acerto de quantidades após medição" />
+            </label>
+          </div>
+        )}
+        <h3 style={{ margin: "4px 0 10px" }}>1 · Fornecedor e obra</h3>
         <div className="form-grid">
           <label>
             Fornecedor
-            <select value={supplierId} onChange={(event) => setSupplierId(event.target.value)} required>
+            <select value={supplierId} onChange={(event) => setSupplierId(event.target.value)} required disabled={isRevision}>
               <option value="">Selecionar fornecedor</option>
               {activeSuppliers.map((item) => (
                 <option value={item.id} key={item.id}>
@@ -2505,7 +2549,7 @@ function POForm({
           </label>
           <label>
             Obra
-            <select value={projectId} onChange={(event) => changeProject(event.target.value)} required>
+            <select value={projectId} onChange={(event) => changeProject(event.target.value)} required disabled={isRevision}>
               <option value="">Selecionar obra</option>
               {activeProjects.map((item) => (
                 <option value={item.id} key={item.id}>
@@ -2583,7 +2627,7 @@ function POForm({
 
         <div className="line-editor">
           <div className="section-heading compact-heading">
-            <h2>Linhas</h2>
+            <h2>2 · Linhas</h2>
             <div className="linhas-acoes">
               <button type="button" className="secondary" onClick={abrirPrecario} disabled={!supplierId || !projectId}>
                 <Tags size={16} />
@@ -2758,15 +2802,16 @@ function POForm({
             </div>
           )}
           <datalist id="subcategorias-list">
-            {activeCategories.map((cat) => (
-              <option value={cat.category_code ? `${cat.category_name} (${cat.category_code})` : cat.category_name} key={cat.id} />
-            ))}
+            {[...activeCategories]
+              .sort((x, y) => catLabel(x).localeCompare(catLabel(y), "pt", { numeric: true }))
+              .map((cat) => (
+                <option value={catLabel(cat)} key={cat.id} />
+              ))}
           </datalist>
           <div className="line-header" aria-hidden="true">
             <span><input type="checkbox" checked={lines.length > 0 && selectedLines.size === lines.length} onChange={toggleAllLines} title="Selecionar todas" /></span>
             <span>Ref. artigo</span>
             <span>Descrição</span>
-            <span>Categoria</span>
             <span>Subcategoria</span>
             <span>Nº de unidades</span>
             <span>Unidade</span>
@@ -2792,27 +2837,17 @@ function POForm({
                 <input type="checkbox" className="line-select" checked={selectedLines.has(index)} onChange={() => toggleLineSelected(index)} />
                 <input placeholder="Ref. artigo" value={line.item_ref ?? ""} onChange={(event) => updateLine(index, { item_ref: event.target.value })} />
                 <input placeholder="Descrição" value={line.description} onChange={(event) => updateLine(index, { description: event.target.value })} />
-                <input
-                  className="categoria-auto"
-                  readOnly
-                  tabIndex={-1}
-                  value={selectedExpenseType}
-                  placeholder="Categoria (automática)"
-                  title="Preenchida automaticamente ao escolher a subcategoria"
-                />
+                <div style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
                 <input
                   list="subcategorias-list"
                   placeholder={missing ? "Obrigatório — escolher…" : "Procurar subcategoria…"}
                   style={missing ? { borderColor: "#c41d2d", color: "#c41d2d" } : undefined}
                   aria-invalid={missing || undefined}
-                  defaultValue={selectedCategory ? (selectedCategory.category_code ? `${selectedCategory.category_name} (${selectedCategory.category_code})` : selectedCategory.category_name) : ""}
+                  defaultValue={selectedCategory ? catLabel(selectedCategory) : ""}
                   key={`sub-${index}-${line.category_id ?? "none"}`}
                   onInput={(event) => {
                     const typed = (event.target as HTMLInputElement).value;
-                    const chosen = activeCategories.find((cat) => {
-                      const label = cat.category_code ? `${cat.category_name} (${cat.category_code})` : cat.category_name;
-                      return label === typed;
-                    });
+                    const chosen = findCategory(activeCategories, typed);
                     if (chosen) {
                       updateLine(index, { category_id: chosen.id, expense_type: chosen.expense_type ?? "" });
                     } else if (line.category_id) {
@@ -2821,6 +2856,8 @@ function POForm({
                     }
                   }}
                 />
+                {selectedExpenseType && <small className="muted" style={{ fontSize: "0.72rem" }}>{selectedExpenseType}</small>}
+                </div>
                 <input type="number" min="0" step="any" inputMode="decimal" value={line.quantity} onChange={(event) => updateLine(index, { quantity: Number(event.target.value) })} />
                 <input value={line.unit} onChange={(event) => updateLine(index, { unit: event.target.value })} />
                 <input type="number" min="0" step="any" inputMode="decimal" value={line.rate} onChange={(event) => updateLine(index, { rate: Number(event.target.value) })} />
@@ -2841,6 +2878,7 @@ function POForm({
           })}
         </div>
 
+        <h3 style={{ margin: "18px 0 10px" }}>3 · Entrega e documento</h3>
         <div className="form-grid">
           <div className="wide attachment-options">
             <label className="tick-box">
@@ -2888,6 +2926,18 @@ function POForm({
           </label>
         </div>
 
+        <div
+          style={{
+            position: "sticky",
+            bottom: 0,
+            zIndex: 5,
+            background: "#fff",
+            borderTop: "1px solid var(--line, #e4e6eb)",
+            boxShadow: "0 -6px 20px rgba(20, 58, 103, 0.06)",
+            padding: "10px 0",
+            marginTop: 12,
+          }}
+        >
         <div className="totals-strip">
           <span>Líquido {money(subtotal)}</span>
           <span>IVA {money(vatTotal)}</span>
@@ -2940,6 +2990,7 @@ function POForm({
             </button>
           )}
         </div>
+        </div>
       </form>
     </section>
   );
@@ -2948,6 +2999,15 @@ function POForm({
 function PreviewModal({ po, settings, onClose, canWrite, currentStaff, onRefresh }: { po: PurchaseOrder; settings: AppSetting[]; onClose: () => void; canWrite: boolean; currentStaff: StaffMember | null; onRefresh: () => Promise<unknown> }) {
   const company = (settings.find((setting) => setting.setting_key === "company")?.setting_value ?? {}) as Record<string, string>;
   const [sentAt, setSentAt] = useState<string | null>(po.sent_to_supplier_at ?? null);
+  const [emailOpened, setEmailOpened] = useState(false);
+  const [revisions, setRevisions] = useState<PurchaseOrderRevision[]>([]);
+  useEffect(() => {
+    if (!po.revision) {
+      setRevisions([]);
+      return;
+    }
+    loadPoRevisions(po.id).then(setRevisions).catch(() => setRevisions([]));
+  }, [po.id, po.revision]);
   const [sendError, setSendError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const supplierEmail = po.supplier?.email ?? "";
@@ -3018,18 +3078,21 @@ function PreviewModal({ po, settings, onClose, canWrite, currentStaff, onRefresh
         <div className="modal-actions">
           <button onClick={printPurchaseOrder}>
             <Printer size={16} />
-            Imprimir / Guardar PDF
+            1 · Guardar PDF
           </button>
           <button
             className="secondary"
-            onClick={openEmailToSupplier}
+            onClick={() => {
+              openEmailToSupplier();
+              setEmailOpened(true);
+            }}
             disabled={!supplierEmail}
             title={supplierEmail ? `Abre o email para ${supplierEmail}` : "O fornecedor não tem email na ficha"}
           >
             <Mail size={16} />
-            Email ao fornecedor
+            2 · Email ao fornecedor
           </button>
-          {sentAt ? (
+          {po.status !== "validated" ? null : sentAt ? (
             <span className="sent-badge">
               ✓ Enviada em {shortDate(sentAt)}
               <button className="link-button" disabled={busy} onClick={() => alternarEnviada(false)}>desmarcar</button>
@@ -3037,7 +3100,7 @@ function PreviewModal({ po, settings, onClose, canWrite, currentStaff, onRefresh
           ) : (
             <button className="secondary" disabled={busy} onClick={() => alternarEnviada(true)}>
               <CheckCircle2 size={16} />
-              Marcar como enviada
+              3 · Marcar como enviada
             </button>
           )}
           <button className="secondary" onClick={onClose}>
@@ -3046,8 +3109,30 @@ function PreviewModal({ po, settings, onClose, canWrite, currentStaff, onRefresh
           </button>
         </div>
         <p className="envio-hint no-print">
-          Guarde primeiro o PDF, clique em <strong>Email ao fornecedor</strong> e <strong>anexe o PDF no Outlook</strong> antes de enviar.
+          {po.status === "validated"
+            ? "Três passos: guarde o PDF, abra o email e anexe o PDF no Outlook, e no fim marque como enviada."
+            : "Só adjudicações validadas podem ser enviadas ao fornecedor."}
         </p>
+        {emailOpened && !sentAt && po.status === "validated" && (
+          <p className="notice no-print">
+            Já enviou o email com o PDF?{" "}
+            <button type="button" className="link-button" disabled={busy} onClick={() => alternarEnviada(true)}>
+              Sim, marcar como enviada
+            </button>
+          </p>
+        )}
+        {revisions.length > 0 && (
+          <div className="notice no-print">
+            <strong>Histórico de revisões</strong>
+            {revisions.map((rev) => (
+              <span key={rev.id} style={{ display: "block" }}>
+                Rev. {rev.revision} substituída em {shortDate(rev.created_at)}
+                {rev.staff?.full_name ? ` por ${rev.staff.full_name}` : ""}
+                {rev.reason ? ` — ${rev.reason}` : ""}
+              </span>
+            ))}
+          </div>
+        )}
         {sendError && <p className="notice error no-print">{sendError}</p>}
         <PurchaseOrderPreview po={po} company={company} />
         <div className="recon-wrap no-print">
@@ -3186,7 +3271,10 @@ function PurchaseOrderPreview({ po, company }: { po: PurchaseOrder; company: Rec
         <section className="po-meta-grid">
           <div className="po-number-cell">
             <span>Número</span>
-            <strong>{po.po_number}</strong>
+            <strong>
+              {po.po_number}
+              {po.revision ? ` · Rev. ${po.revision}` : ""}
+            </strong>
           </div>
           <div>
             <span>Data</span>
