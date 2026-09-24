@@ -30,6 +30,7 @@ import {
   Mail,
   ClipboardPaste,
   Tags,
+  Truck,
 } from "lucide-react";
 import {
   createPurchaseOrder,
@@ -50,6 +51,7 @@ import {
   submitForApproval,
   decideApproval,
   loadPriceItems,
+  loadDeliveredByPo,
   markSentToSupplier,
   unmarkSentToSupplier,
   upsertCategory,
@@ -66,6 +68,7 @@ import { DeliveryReconciliation } from "./DeliveryReconciliation";
 import { AccrualsView } from "./AccrualsView";
 import { ReinvoicingView } from "./ReinvoicingView";
 import { PriceListView } from "./PriceListView";
+import { ReceiveMaterialView } from "./ReceiveMaterialView";
 import legendreLogo from "./assets/legendre-logo.png";
 import type {
   AppRole,
@@ -90,6 +93,7 @@ type ViewKey =
   | "approvals"
   | "price-lists"
   | "new-po"
+  | "receive"
   | "suppliers"
   | "projects"
   | "staff"
@@ -123,6 +127,37 @@ function statusLabel(status: PurchaseOrderStatus): string {
     case "pending_approval": return "A aguardar aprovação";
     case "rejected": return "Rejeitada";
     default: return "Rascunho";
+  }
+}
+
+// Atalhos "O que precisa de mim" (Dashboard) → filtro rápido na lista
+type ListPreset = "my-drafts" | "returned" | "to-send" | "late-delivery" | null;
+
+const PRESET_LABELS: Record<Exclude<ListPreset, null>, string> = {
+  "my-drafts": "Os meus rascunhos por validar",
+  returned: "Devolvidas para corrigir",
+  "to-send": "Validadas por enviar",
+  "late-delivery": "Entregas em atraso sem guia",
+};
+
+function matchesPreset(
+  po: PurchaseOrder,
+  preset: ListPreset,
+  staffId: string | null,
+  delivered: Record<string, number>,
+  today: string,
+): boolean {
+  switch (preset) {
+    case "my-drafts":
+      return po.status === "draft" && po.requester_id === staffId && !po.approval_comment;
+    case "returned":
+      return po.status === "draft" && po.requester_id === staffId && Boolean(po.approval_comment);
+    case "to-send":
+      return po.status === "validated" && !po.sent_to_supplier_at;
+    case "late-delivery":
+      return po.status === "validated" && Boolean(po.delivery_date) && String(po.delivery_date) < today && (delivered[po.id] ?? 0) <= 0;
+    default:
+      return true;
   }
 }
 
@@ -203,6 +238,9 @@ function ProcurementShell({ session }: { session: Session }) {
   });
   const [chosenApprover, setChosenApprover] = useState("");
   const [previewPurchaseOrder, setPreviewPurchaseOrder] = useState<PurchaseOrder | null>(null);
+  const [receivePoId, setReceivePoId] = useState<string | null>(null);
+  const [listPreset, setListPreset] = useState<ListPreset>(null);
+  const [delivered, setDelivered] = useState<Record<string, number>>({});
 
   const currentStaff = useMemo(() => {
     const email = session.user.email?.toLowerCase();
@@ -221,6 +259,8 @@ function ProcurementShell({ session }: { session: Session }) {
       const [nextRefs, nextPos] = await Promise.all([loadReferenceData(), loadPurchaseOrders()]);
       setReferences(nextRefs);
       setPurchaseOrders(nextPos);
+      // valor entregue por adjudicação (coluna "Entregue" e "Entregas em atraso"); se falhar, não bloqueia
+      loadDeliveredByPo().then(setDelivered).catch(() => setDelivered({}));
       return { references: nextRefs, purchaseOrders: nextPos };
     } catch (err) {
       setError(err instanceof Error ? err.message : "Não foi possível carregar os dados.");
@@ -230,13 +270,20 @@ function ProcurementShell({ session }: { session: Session }) {
     }
   }
 
-  async function handlePurchaseOrderSaved(savedPurchaseOrderId: string) {
+  async function handlePurchaseOrderSaved(savedPurchaseOrderId: string, thenValidate = false) {
     const refreshed = await refresh();
     const savedPurchaseOrder = refreshed?.purchaseOrders.find((po) => po.id === savedPurchaseOrderId);
 
     setEditingPurchaseOrder(null);
+    setListPreset(null);
     setView("purchase-orders");
-    if (savedPurchaseOrder) setPreviewPurchaseOrder(savedPurchaseOrder);
+    if (!savedPurchaseOrder) return;
+    if (thenValidate && savedPurchaseOrder.status === "draft") {
+      // "Guardar e validar": valida logo, ou abre a escolha do aprovador se exceder o limite
+      await handleValidatePurchaseOrder(savedPurchaseOrder);
+      return;
+    }
+    setPreviewPurchaseOrder(savedPurchaseOrder);
   }
 
   async function refreshView() {
@@ -408,6 +455,7 @@ function ProcurementShell({ session }: { session: Session }) {
     { key: "accruals", label: "Accruals", icon: TrendingUp },
     { key: "reinvoicing", label: "Refaturação", icon: Repeat, disabled: !canAdmin },
     { key: "new-po", label: "Nova Adjudicação", icon: FilePlus2, disabled: !canWritePo },
+    { key: "receive", label: "Receber material", icon: Truck, disabled: !canWritePo },
     { key: "suppliers", label: "Fornecedores", icon: Package, disabled: !canManageSuppliers },
     { key: "price-lists", label: "Preçários", icon: Tags, disabled: !currentStaff?.is_active },
     { key: "projects", label: "Obras", icon: Building2, disabled: !canAdmin },
@@ -434,6 +482,8 @@ function ProcurementShell({ session }: { session: Session }) {
                 key={item.key}
                 onClick={() => {
                   if (item.key === "new-po") setEditingPurchaseOrder(null);
+                  if (item.key === "receive") setReceivePoId(null);
+                  if (item.key === "purchase-orders") setListPreset(null);
                   setView(item.key);
                 }}
                 title={item.disabled ? "Acesso de administrador necessário" : item.label}
@@ -471,7 +521,18 @@ function ProcurementShell({ session }: { session: Session }) {
           <PendingAccessScreen email={session.user.email ?? ""} staff={currentStaff} onSignOut={() => supabase?.auth.signOut()} />
         ) : (
           <>
-            {view === "dashboard" && <Dashboard purchaseOrders={purchaseOrders} references={references} />}
+            {view === "dashboard" && (
+              <Dashboard
+                purchaseOrders={purchaseOrders}
+                references={references}
+                currentStaff={currentStaff}
+                delivered={delivered}
+                onOpenPreset={(preset) => {
+                  setListPreset(preset);
+                  setView("purchase-orders");
+                }}
+              />
+            )}
             {view === "purchase-orders" && (
               <PurchaseOrders
                 canWrite={canWritePo}
@@ -492,6 +553,13 @@ function ProcurementShell({ session }: { session: Session }) {
                 onDelete={handleDeletePurchaseOrder}
                 onPreview={setPreviewPurchaseOrder}
                 onValidate={handleValidatePurchaseOrder}
+                delivered={delivered}
+                preset={listPreset}
+                onClearPreset={() => setListPreset(null)}
+                onReceive={(po) => {
+                  setReceivePoId(po.id);
+                  setView("receive");
+                }}
               />
             )}
             {view === "accruals" && <AccrualsView />}
@@ -544,6 +612,23 @@ function ProcurementShell({ session }: { session: Session }) {
                 onSaved={handlePurchaseOrderSaved}
                 onDone={() => {
                   setEditingPurchaseOrder(null);
+                  setView("purchase-orders");
+                }}
+              />
+            )}
+            {view === "receive" && (
+              <ReceiveMaterialView
+                key={receivePoId ?? "escolher"}
+                purchaseOrders={purchaseOrders}
+                initialPoId={receivePoId}
+                onDone={async (message) => {
+                  await refresh();
+                  pushToast(message);
+                  setReceivePoId(null);
+                  setView("purchase-orders");
+                }}
+                onCancel={() => {
+                  setReceivePoId(null);
                   setView("purchase-orders");
                 }}
               />
@@ -1497,7 +1582,25 @@ function DataTable<T extends Record<string, unknown>>({
   );
 }
 
-function Dashboard({ purchaseOrders, references }: { purchaseOrders: PurchaseOrder[]; references: ReferenceData }) {
+function Dashboard({
+  purchaseOrders,
+  references,
+  currentStaff,
+  delivered,
+  onOpenPreset,
+}: {
+  purchaseOrders: PurchaseOrder[];
+  references: ReferenceData;
+  currentStaff: StaffMember | null;
+  delivered: Record<string, number>;
+  onOpenPreset: (preset: Exclude<ListPreset, null>) => void;
+}) {
+  const today = isoToday();
+  const needs = (["my-drafts", "returned", "to-send", "late-delivery"] as const).map((key) => ({
+    key,
+    label: PRESET_LABELS[key],
+    count: purchaseOrders.filter((po) => matchesPreset(po, key, currentStaff?.id ?? null, delivered, today)).length,
+  }));
   const [filters, setFilters] = useState<DashboardFilters>({
     from: "",
     to: "",
@@ -1554,6 +1657,31 @@ function Dashboard({ purchaseOrders, references }: { purchaseOrders: PurchaseOrd
 
   return (
     <section className="work-section">
+      <div className="section-heading">
+        <h2>O que precisa de mim</h2>
+      </div>
+      <div className="kpi-grid">
+        {needs.map((item) => (
+          <button
+            key={item.key}
+            type="button"
+            className="kpi"
+            onClick={() => onOpenPreset(item.key)}
+            disabled={item.count === 0}
+            style={{
+              textAlign: "left",
+              background: "#fff",
+              color: "inherit",
+              border: item.count > 0 && (item.key === "returned" || item.key === "late-delivery") ? "1px solid var(--red, #e62336)" : "1px solid var(--line, #e4e6eb)",
+              cursor: item.count > 0 ? "pointer" : "default",
+              opacity: item.count > 0 ? 1 : 0.6,
+            }}
+          >
+            <span>{item.label}</span>
+            <strong>{item.count}</strong>
+          </button>
+        ))}
+      </div>
       <FilterBar filters={filters} setFilters={setFilters} references={references} />
       <div className="filters">
         {expenseTypes.length > 0 && (
@@ -1744,11 +1872,19 @@ function PurchaseOrders({
   onEdit,
   onPreview,
   onValidate,
+  delivered,
+  preset,
+  onClearPreset,
+  onReceive,
 }: {
   currentStaff: StaffMember | null;
   purchaseOrders: PurchaseOrder[];
   references: ReferenceData;
   canWrite: boolean;
+  delivered: Record<string, number>;
+  preset: ListPreset;
+  onClearPreset: () => void;
+  onReceive: (po: PurchaseOrder) => void;
   onCopy: (po: PurchaseOrder) => void;
   onDelete: (po: PurchaseOrder) => void;
   onEdit: (po: PurchaseOrder) => void;
@@ -1777,6 +1913,15 @@ function PurchaseOrders({
   );
 
   const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState<PurchaseOrderStatus | "">("");
+  const today = isoToday();
+  const statusCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    purchaseOrders.forEach((po) => {
+      counts[po.status] = (counts[po.status] ?? 0) + 1;
+    });
+    return counts;
+  }, [purchaseOrders]);
   const [sortKey, setSortKey] = useState<
     "po_number" | "po_date" | "project" | "supplier" | "status" | "grand_total"
   >("po_date");
@@ -1787,6 +1932,8 @@ function PurchaseOrders({
       purchaseOrders.filter((po) => {
         if (projectFilter && po.project_id !== projectFilter) return false;
         if (requesterFilter && po.requester_id !== requesterFilter) return false;
+        if (statusFilter && po.status !== statusFilter) return false;
+        if (!matchesPreset(po, preset, currentStaff?.id ?? null, delivered, today)) return false;
         if (typeFilter && !(po.line_items ?? []).some((l) => l.category?.expense_type === typeFilter)) return false;
         if (subFilter && !(po.line_items ?? []).some((l) => l.category_id === subFilter)) return false;
         if (searchTerm) {
@@ -1796,7 +1943,7 @@ function PurchaseOrders({
         }
         return true;
       }),
-    [projectFilter, purchaseOrders, requesterFilter, typeFilter, subFilter, searchTerm],
+    [projectFilter, purchaseOrders, requesterFilter, typeFilter, subFilter, searchTerm, statusFilter, preset, currentStaff?.id, delivered, today],
   );
 
   const sortedPurchaseOrders = useMemo(() => {
@@ -1880,6 +2027,27 @@ function PurchaseOrders({
           </select>
         </label>
       </div>
+      <div className="status-chips" style={{ display: "flex", gap: 6, flexWrap: "wrap", margin: "10px 0" }}>
+        {([["", "Todas", purchaseOrders.length], ...statuses.map((s) => [s, statusLabel(s), statusCounts[s] ?? 0])] as [string, string, number][]).map(([key, label, count]) => (
+          <button
+            key={key || "all"}
+            type="button"
+            className={statusFilter === key ? undefined : "secondary"}
+            onClick={() => setStatusFilter(key as PurchaseOrderStatus | "")}
+            style={{ padding: "5px 12px", fontSize: "0.82rem" }}
+          >
+            {label} {count}
+          </button>
+        ))}
+      </div>
+      {preset && (
+        <div className="notice">
+          Filtro: <strong>{PRESET_LABELS[preset]}</strong>{" "}
+          <button type="button" className="link-button" onClick={onClearPreset}>
+            limpar
+          </button>
+        </div>
+      )}
       <div className="table-wrap">
         <table>
           <thead>
@@ -1890,6 +2058,8 @@ function PurchaseOrders({
               <th className="sortable" onClick={() => toggleSort("project")}>Obra <span className="sort-ind">{sortInd("project")}</span></th>
               <th className="sortable" onClick={() => toggleSort("supplier")}>Fornecedor <span className="sort-ind">{sortInd("supplier")}</span></th>
               <th className="sortable" onClick={() => toggleSort("status")}>Estado <span className="sort-ind">{sortInd("status")}</span></th>
+              <th>Envio</th>
+              <th className="num">Entregue</th>
               <th className="sortable num" onClick={() => toggleSort("grand_total")}>Líquido <span className="sort-ind">{sortInd("grand_total")}</span></th>
               <th className="actions-cell">Ações</th>
             </tr>
@@ -1913,19 +2083,39 @@ function PurchaseOrders({
                       <span className="devolucao-nota rejeitada" title={po.approval_comment}>✕ {po.approval_comment}</span>
                     )}
                   </td>
+                  <td>
+                    {po.status === "validated"
+                      ? po.sent_to_supplier_at
+                        ? <span className="muted">Enviada {shortDate(po.sent_to_supplier_at.slice(0, 10))}</span>
+                        : <strong style={{ color: "var(--warning-text, #965e00)" }}>Por enviar</strong>
+                      : <span className="muted">—</span>}
+                  </td>
+                  <td className="num">
+                    {po.status === "validated" && Number(po.subtotal) > 0 && (delivered[po.id] ?? 0) > 0
+                      ? `${Math.min(100, Math.round(((delivered[po.id] ?? 0) / Number(po.subtotal)) * 100))}%`
+                      : <span className="muted">—</span>}
+                  </td>
                   <td className="num">
                     {money(po.subtotal)}
                     <small className="muted" style={{ display: "block" }}>{money(po.grand_total)} c/ IVA</small>
                   </td>
                   <td className="actions-cell">
+                    {po.status === "draft" && canWrite ? (
+                      po.approval_comment ? (
+                        <button type="button" onClick={() => onEdit(po)} style={{ padding: "5px 12px", fontSize: "0.82rem" }}>Corrigir</button>
+                      ) : (
+                        <button type="button" onClick={() => onValidate(po)} style={{ padding: "5px 12px", fontSize: "0.82rem" }}>Validar</button>
+                      )
+                    ) : po.status === "validated" && !po.sent_to_supplier_at ? (
+                      <button type="button" onClick={() => onPreview(po)} style={{ padding: "5px 12px", fontSize: "0.82rem" }}>Enviar</button>
+                    ) : po.status === "validated" && canWrite ? (
+                      <button type="button" className="secondary" onClick={() => onReceive(po)} style={{ padding: "5px 12px", fontSize: "0.82rem" }}>Receber</button>
+                    ) : null}
                     <button className="icon-button" onClick={() => onPreview(po)} title="Pré-visualizar" aria-label="Pré-visualizar">
                       <Eye size={16} />
                     </button>
                     <button className="icon-button" disabled={!canWrite || (po.status !== "draft" && po.status !== "validated")} onClick={() => onEdit(po)} title={po.status === "validated" ? "Editar adjudicação validada" : "Editar rascunho"} aria-label="Editar adjudicação">
                       <Pencil size={16} />
-                    </button>
-                    <button className="icon-button" disabled={!canWrite || po.status !== "draft"} onClick={() => onValidate(po)} title="Validar adjudicação" aria-label="Validar adjudicação">
-                      <ArrowRight size={16} />
                     </button>
                     <button className="icon-button" disabled={!canWrite} onClick={() => onCopy(po)} title="Copiar para novo rascunho" aria-label="Copiar para novo rascunho">
                       <Copy size={16} />
@@ -1939,7 +2129,7 @@ function PurchaseOrders({
             })}
             {!filteredPurchaseOrders.length && (
               <tr>
-                <td colSpan={8}>
+                <td colSpan={10}>
                   {purchaseOrders.length ? "Nenhuma adjudicação corresponde aos filtros." : "Ainda sem adjudicações."}
                 </td>
               </tr>
@@ -1999,7 +2189,7 @@ function POForm({
   currentStaff: StaffMember | null;
   editingPurchaseOrder: PurchaseOrder | null;
   references: ReferenceData;
-  onSaved: (savedPurchaseOrderId: string) => Promise<void>;
+  onSaved: (savedPurchaseOrderId: string, thenValidate?: boolean) => Promise<void>;
   onDone: () => void;
 }) {
   const activeSuppliers = references.suppliers.filter((supplier) => supplier.is_active || supplier.id === editingPurchaseOrder?.supplier_id);
@@ -2085,6 +2275,10 @@ function POForm({
   ]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [showLineErrors, setShowLineErrors] = useState(false);
+  const validateAfterSave = useRef(false);
+  const missingCategoryCount = lines.filter((line) => line.description.trim() && !line.category_id).length;
+  const canValidateAfterSave = !editingPurchaseOrder || editingPurchaseOrder.status === "draft";
 
   const supplier = references.suppliers.find((item) => item.id === supplierId) ?? null;
   const project = references.projects.find((item) => item.id === projectId) ?? null;
@@ -2231,7 +2425,13 @@ function POForm({
       return;
     }
     if (cleanLines.some((line) => !line.category_id)) {
-      setError("Selecione uma categoria de custo para cada linha.");
+      const n = cleanLines.filter((line) => !line.category_id).length;
+      setShowLineErrors(true);
+      setError(`${n} linha(s) sem subcategoria — estão assinaladas a vermelho.`);
+      window.setTimeout(() => {
+        const first = document.querySelector('[data-line-missing="true"]');
+        if (first) window.scrollTo({ top: first.getBoundingClientRect().top + window.scrollY - 140, behavior: "smooth" });
+      }, 0);
       return;
     }
 
@@ -2274,7 +2474,7 @@ function POForm({
       } else {
         savedPurchaseOrderId = await createPurchaseOrder(draft);
       }
-      if (savedPurchaseOrderId) await onSaved(savedPurchaseOrderId);
+      if (savedPurchaseOrderId) await onSaved(savedPurchaseOrderId, validateAfterSave.current && canValidateAfterSave);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Não foi possível guardar a adjudicação.");
     } finally {
@@ -2580,9 +2780,15 @@ function POForm({
           {lines.map((line, index) => {
             const selectedCategory = categoryById.get(line.category_id ?? "");
             const selectedExpenseType = line.expense_type || selectedCategory?.expense_type || "";
+            const missing = showLineErrors && line.description.trim() !== "" && !line.category_id;
 
             return (
-              <div className={selectedLines.has(index) ? "line-row line-row-selected" : "line-row"} key={index}>
+              <div
+                className={selectedLines.has(index) ? "line-row line-row-selected" : "line-row"}
+                key={index}
+                data-line-missing={missing ? "true" : undefined}
+                style={missing ? { background: "#fdecee", borderRadius: 8, boxShadow: "0 0 0 1px #e9a3ab" } : undefined}
+              >
                 <input type="checkbox" className="line-select" checked={selectedLines.has(index)} onChange={() => toggleLineSelected(index)} />
                 <input placeholder="Ref. artigo" value={line.item_ref ?? ""} onChange={(event) => updateLine(index, { item_ref: event.target.value })} />
                 <input placeholder="Descrição" value={line.description} onChange={(event) => updateLine(index, { description: event.target.value })} />
@@ -2596,7 +2802,9 @@ function POForm({
                 />
                 <input
                   list="subcategorias-list"
-                  placeholder="Procurar subcategoria…"
+                  placeholder={missing ? "Obrigatório — escolher…" : "Procurar subcategoria…"}
+                  style={missing ? { borderColor: "#c41d2d", color: "#c41d2d" } : undefined}
+                  aria-invalid={missing || undefined}
                   defaultValue={selectedCategory ? (selectedCategory.category_code ? `${selectedCategory.category_name} (${selectedCategory.category_code})` : selectedCategory.category_name) : ""}
                   key={`sub-${index}-${line.category_id ?? "none"}`}
                   onInput={(event) => {
@@ -2691,10 +2899,34 @@ function POForm({
           </div>
         )}
         <div className="button-row">
-          <button type="submit" disabled={busy}>
+          {missingCategoryCount > 0 && (
+            <span style={{ color: "var(--red-text, #c41d2d)", fontWeight: 600, alignSelf: "center" }}>
+              {missingCategoryCount} linha(s) sem subcategoria
+            </span>
+          )}
+          <button
+            type="submit"
+            disabled={busy}
+            className={canValidateAfterSave ? "secondary" : undefined}
+            onClick={() => {
+              validateAfterSave.current = false;
+            }}
+          >
             <Save size={16} />
-            {editingPurchaseOrder ? "Guardar alterações" : "Criar rascunho de Adjudicação"}
+            {editingPurchaseOrder ? "Guardar alterações" : "Guardar rascunho"}
           </button>
+          {canValidateAfterSave && (
+            <button
+              type="submit"
+              disabled={busy}
+              onClick={() => {
+                validateAfterSave.current = true;
+              }}
+            >
+              <Check size={16} />
+              {overLimit ? "Guardar e submeter para aprovação" : "Guardar e validar"}
+            </button>
+          )}
           {editingPurchaseOrder && (
             <button type="button" className="secondary" onClick={onDone}>
               <X size={16} />
