@@ -10,6 +10,7 @@ import {
 } from "./lib/data";
 import { parseExcelLines } from "./lib/excel";
 import { money, shortDate } from "./lib/format";
+import { confirmDialog } from "./lib/dialog";
 import type { ReferenceData, SupplierPriceItem } from "./types";
 
 type Comparacao = {
@@ -179,7 +180,7 @@ export function PriceListView({ references, canWrite }: { references: ReferenceD
   }
 
   async function remover(item: SupplierPriceItem) {
-    if (!window.confirm(`Remover "${item.description}" do preçário?`)) return;
+    if (!(await confirmDialog(`Remover "${item.description}" do preçário?`))) return;
     try {
       await deletePriceItem(item.id);
       await refresh();
