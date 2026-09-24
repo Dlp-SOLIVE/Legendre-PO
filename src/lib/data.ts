@@ -6,6 +6,7 @@ import type {
   Project,
   PurchaseOrder,
   PurchaseOrderLineItem,
+  PurchaseOrderRevision,
   PurchaseOrderStatus,
   ReferenceData,
   SupplierPriceItem,
@@ -317,6 +318,50 @@ export async function updatePurchaseOrder(id: string, draft: PurchaseOrderDraft)
     const { error: lineError } = await client.from("purchase_order_line_items").insert(rows);
     if (lineError) throw lineError;
   }
+}
+
+// Revisão de uma adjudicação validada (função revise_purchase_order na base de dados):
+// guarda a versão atual no histórico, atualiza cabeçalho e linhas (mantendo as linhas com guias/faturas)
+// e passa para a revisão seguinte. Devolve o novo número de revisão.
+export async function revisePurchaseOrder(id: string, draft: PurchaseOrderDraft, reason: string): Promise<number> {
+  const client = requireClient();
+  const { line_items, ...po } = draft;
+  const lines = line_items.map((item, index) => ({
+    id: item.id ?? null,
+    sort_order: index + 1,
+    item_ref: item.item_ref,
+    description: item.description,
+    quantity: item.quantity,
+    unit: item.unit,
+    rate: item.rate,
+    discount_pct: item.discount_pct ?? 0,
+    discount_pct_2: item.discount_pct_2 ?? 0,
+    vat_rate: item.vat_rate,
+    category_id: item.category_id,
+  }));
+  const { data, error } = await client.rpc("revise_purchase_order", {
+    po_id: id,
+    p_header: po,
+    p_lines: lines,
+    p_reason: reason.trim() || null,
+  });
+  if (error) throw error;
+  return Number(data ?? 0);
+}
+
+export async function loadPoRevisions(poId: string): Promise<PurchaseOrderRevision[]> {
+  const client = requireClient();
+  const { data, error } = await client
+    .from("purchase_order_revisions")
+    .select("id, purchase_order_id, revision, reason, created_by, created_at, staff:staff_members(full_name)")
+    .eq("purchase_order_id", poId)
+    .order("revision", { ascending: false });
+  if (error) throw error;
+  return ((data ?? []) as unknown[]).map((row) => {
+    const r = row as PurchaseOrderRevision & { staff: { full_name: string } | { full_name: string }[] | null };
+    const staff = Array.isArray(r.staff) ? r.staff[0] ?? null : r.staff;
+    return { ...r, staff };
+  });
 }
 
 export function roleCanAdmin(role: AppRole | null | undefined) {
