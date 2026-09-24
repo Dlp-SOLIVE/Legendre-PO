@@ -2026,3 +2026,84 @@ tbody tr:hover > td { background: #fafbfc; }
 @media print {
   .work-section, .panel, .table-wrap { border: 0; border-radius: 0; }
 }
+
+
+/* ═══════════════════════════════════════════════════════════════
+   Fase 5 · Formulário em blocos (proposta A) e painel lateral de administração (ponto 33)
+   ═══════════════════════════════════════════════════════════════ */
+.work-section.po-form-section { background: transparent; border: 0; padding: 0; }
+.po-block {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  margin-bottom: 14px;
+  padding: 18px 20px;
+}
+.po-block .form-grid { margin-bottom: 0; }
+.po-block-title {
+  align-items: center;
+  color: var(--text);
+  display: flex;
+  font-size: 1rem;
+  gap: 10px;
+  margin: 0 0 14px;
+}
+.line-editor .section-heading h2.po-block-title { color: var(--text); font-size: 1rem; margin: 0; }
+.po-step {
+  align-items: center;
+  background: var(--navy);
+  border-radius: 999px;
+  color: #fff;
+  display: inline-flex;
+  flex: none;
+  font-size: 12px;
+  font-weight: 700;
+  height: 22px;
+  justify-content: center;
+  width: 22px;
+}
+.po-block-head { align-items: center; display: flex; flex-wrap: wrap; gap: 12px; }
+.po-block-head .po-block-title { margin: 0; }
+.po-block-head > .link-button { margin-left: auto; }
+.po-block-head + .form-grid { margin-top: 14px; }
+.po-block-summary { font-size: 0.85rem; }
+.field-hint { color: var(--muted); font-size: 0.75rem; font-weight: 400; line-height: 1.35; }
+.po-form-section form > div[style*="sticky"] {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px 16px !important;
+}
+
+.admin-split {
+  align-items: start;
+  display: grid;
+  gap: 16px;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 440px);
+}
+.admin-split > .admin-editor {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  max-height: calc(100vh - 32px);
+  overflow: auto;
+  padding: 16px 18px;
+  position: sticky;
+  top: 16px;
+}
+.admin-editor .editor-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); margin: 0; }
+.admin-editor .admin-section {
+  border-top: 1px solid var(--line);
+  color: var(--navy);
+  font-size: 0.75rem;
+  font-weight: 700;
+  grid-column: 1 / -1;
+  letter-spacing: 0.05em;
+  margin: 8px 0 0;
+  padding-top: 12px;
+  text-transform: uppercase;
+}
+.admin-editor .admin-section:first-child { border-top: 0; margin-top: 0; padding-top: 0; }
+@media (max-width: 1100px) {
+  .admin-split { grid-template-columns: 1fr; }
+  .admin-split > .admin-editor { max-height: none; position: static; }
+}
