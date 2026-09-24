@@ -608,22 +608,19 @@ export async function decideApproval(poId: string, action: "approve" | "return" 
 // ─────────────────────────────────────────────
 
 // Marca a adjudicação como enviada ao fornecedor (o email sai do Outlook).
-export async function markSentToSupplier(poId: string, staffId: string | null): Promise<void> {
+// Usa a função mark_po_sent da base de dados: as regras de acesso só permitem alterar
+// rascunhos diretamente, por isso a gravação direta numa adjudicação validada não ficava registada.
+// staffId mantém-se na assinatura por compatibilidade (a função identifica o utilizador pela sessão).
+export async function markSentToSupplier(poId: string, _staffId: string | null): Promise<void> {
   const client = requireClient();
-  const { error } = await client
-    .from("purchase_orders")
-    .update({ sent_to_supplier_at: new Date().toISOString(), sent_by: staffId })
-    .eq("id", poId);
+  const { error } = await client.rpc("mark_po_sent", { po_id: poId, p_sent: true });
   if (error) throw error;
 }
 
 // Desfaz a marcação (caso tenha sido clicada por engano).
 export async function unmarkSentToSupplier(poId: string): Promise<void> {
   const client = requireClient();
-  const { error } = await client
-    .from("purchase_orders")
-    .update({ sent_to_supplier_at: null, sent_by: null })
-    .eq("id", poId);
+  const { error } = await client.rpc("mark_po_sent", { po_id: poId, p_sent: false });
   if (error) throw error;
 }
 
