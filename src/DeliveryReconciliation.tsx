@@ -135,6 +135,7 @@ export function DeliveryReconciliation({ purchaseOrder, canWrite }: Props) {
           {showGuia && canWrite && (
             <DeliveryNoteForm
               lineItems={lineItems}
+              recon={recon}
               onCancel={() => setShowGuia(false)}
               onSaved={async () => { setShowGuia(false); await refresh(); }}
               purchaseOrderId={purchaseOrder.id}
@@ -145,6 +146,7 @@ export function DeliveryReconciliation({ purchaseOrder, canWrite }: Props) {
           {showFatura && canWrite && (
             <InvoiceForm
               lineItems={lineItems}
+              recon={recon}
               onCancel={() => setShowFatura(false)}
               onSaved={async () => { setShowFatura(false); await refresh(); }}
               purchaseOrderId={purchaseOrder.id}
@@ -237,16 +239,24 @@ function AnexoLink({ path }: { path: string }) {
 function DeliveryNoteForm({
   purchaseOrderId,
   lineItems,
+  recon,
   onSaved,
   onCancel,
 }: {
   purchaseOrderId: string;
   lineItems: PurchaseOrder["line_items"];
+  recon: LineReconciliation[];
   onSaved: () => void;
   onCancel: () => void;
 }) {
   const items = (lineItems ?? []).filter((li): li is typeof li & { id: string } => Boolean(li.id));
   const [guiaNumber, setGuiaNumber] = useState("");
+  const reconById = new Map(recon.map((row) => [row.line_item_id, row]));
+  // quanto falta receber em cada linha (encomendado − já recebido)
+  const outstanding = (id: string, ordered: number) => {
+    const row = reconById.get(id);
+    return row ? Number(row.qty_ordered) - Number(row.qty_received) : ordered;
+  };
   const [date, setDate] = useState(isoToday());
   const [qty, setQty] = useState<Record<string, number>>({});
   const [file, setFile] = useState<File | null>(null);
@@ -305,8 +315,13 @@ function DeliveryNoteForm({
               <td>{li.description}</td>
               <td className="num">{Number(li.quantity)} {li.unit}</td>
               <td className="num">
-                <input type="number" min="0" step="any" value={qty[li.id] ?? ""}
+                <input type="number" min="0" step="any" inputMode="decimal" value={qty[li.id] ?? ""}
                   onChange={(e) => setQty({ ...qty, [li.id]: Number(e.target.value) })} />
+                {Number(qty[li.id] ?? 0) > outstanding(li.id, Number(li.quantity)) && (
+                  <span className="flag-warn" style={{ display: "block", fontSize: "0.78rem" }}>
+                    Acima do que falta receber ({outstanding(li.id, Number(li.quantity))} {li.unit})
+                  </span>
+                )}
               </td>
             </tr>
           ))}
@@ -327,16 +342,24 @@ function DeliveryNoteForm({
 function InvoiceForm({
   purchaseOrderId,
   lineItems,
+  recon,
   onSaved,
   onCancel,
 }: {
   purchaseOrderId: string;
   lineItems: PurchaseOrder["line_items"];
+  recon: LineReconciliation[];
   onSaved: () => void;
   onCancel: () => void;
 }) {
   const items = (lineItems ?? []).filter((li): li is typeof li & { id: string } => Boolean(li.id));
   const [invNumber, setInvNumber] = useState("");
+  const reconById = new Map(recon.map((row) => [row.line_item_id, row]));
+  // quanto foi entregue e ainda não faturado
+  const toInvoice = (id: string) => {
+    const row = reconById.get(id);
+    return row ? Number(row.qty_received) - Number(row.qty_invoiced) : 0;
+  };
   const [date, setDate] = useState(isoToday());
   const [qty, setQty] = useState<Record<string, number>>({});
   const [price, setPrice] = useState<Record<string, number>>(() => {
@@ -394,8 +417,13 @@ function InvoiceForm({
               <td>{li.description}</td>
               <td className="num">{money(li.rate)}</td>
               <td className="num">
-                <input type="number" min="0" step="any" value={qty[li.id] ?? ""}
+                <input type="number" min="0" step="any" inputMode="decimal" value={qty[li.id] ?? ""}
                   onChange={(e) => setQty({ ...qty, [li.id]: Number(e.target.value) })} />
+                {Number(qty[li.id] ?? 0) > toInvoice(li.id) && (
+                  <span className="flag-warn" style={{ display: "block", fontSize: "0.78rem" }}>
+                    Acima do entregue por faturar ({toInvoice(li.id)} {li.unit})
+                  </span>
+                )}
               </td>
               <td className="num">
                 <input type="number" min="0" step="any" value={price[li.id] ?? ""}
