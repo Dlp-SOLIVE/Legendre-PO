@@ -1803,3 +1803,21 @@ th.sortable:hover { color: var(--red-text); }
 .nav-item.active { box-shadow: inset 3px 0 0 var(--red); }
 
 .accrual-artigo { padding-left: 24px; color: var(--muted); }
+
+
+/* ── Fase 3: menu agrupado e recolhível em ecrãs pequenos ── */
+.sidebar .nav-group {
+  grid-column: 1 / -1;
+  margin: 14px 12px 4px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted, #6f6e6e);
+}
+.sidebar .nav-group:first-child { margin-top: 4px; }
+.nav-toggle { display: none; }
+@media (max-width: 1100px) {
+  .nav-toggle { display: inline-flex; align-items: center; gap: 8px; margin: 8px 0; }
+  .sidebar nav.collapsed { display: none; }
+}
