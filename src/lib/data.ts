@@ -396,6 +396,27 @@ export async function loadReconciliation(purchaseOrderId: string) {
   return data ?? [];
 }
 
+// Valor entregue (ao preço da adjudicação) por adjudicação, para a coluna "Entregue" da lista.
+// Lê em páginas de 1000 linhas (limite por pedido do Supabase).
+export async function loadDeliveredByPo(): Promise<Record<string, number>> {
+  const client = requireClient();
+  const out: Record<string, number> = {};
+  const pageSize = 1000;
+  for (let from = 0; from < 50000; from += pageSize) {
+    const { data, error } = await client
+      .from("v_line_reconciliation")
+      .select("purchase_order_id, value_received")
+      .range(from, from + pageSize - 1);
+    if (error) throw error;
+    const rows = (data ?? []) as { purchase_order_id: string; value_received: number | null }[];
+    rows.forEach((row) => {
+      out[row.purchase_order_id] = (out[row.purchase_order_id] ?? 0) + Number(row.value_received ?? 0);
+    });
+    if (rows.length < pageSize) break;
+  }
+  return out;
+}
+
 export async function loadAccrualsByProjectMonth() {
   const client = requireClient();
   const { data, error } = await client
