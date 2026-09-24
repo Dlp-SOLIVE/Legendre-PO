@@ -61,7 +61,7 @@ import {
 import { downloadCsv } from "./lib/csv";
 import { parseExcelLines } from "./lib/excel";
 import { hasSupabaseConfig, supabase } from "./lib/supabase";
-import { isoToday, money, shortDate } from "./lib/format";
+import { isoToday, lineNet, lineNetRaw, money, shortDate } from "./lib/format";
 import { DeliveryReconciliation } from "./DeliveryReconciliation";
 import { AccrualsView } from "./AccrualsView";
 import { ReinvoicingView } from "./ReinvoicingView";
@@ -517,7 +517,10 @@ function ProcurementShell({ session }: { session: Session }) {
                             <td>{po.po_number}</td>
                             <td>{po.project?.project_name ?? "—"}</td>
                             <td>{po.supplier?.supplier_name ?? "—"}</td>
-                            <td className="num">{money(po.grand_total)}</td>
+                            <td className="num">
+                              {money(po.grand_total)} c/ IVA
+                              <small className="muted" style={{ display: "block" }}>{money(po.subtotal)} líquido</small>
+                            </td>
                             <td>{po.requester?.full_name ?? "—"}</td>
                             <td className="approval-actions">
                               <button className="link-button" onClick={() => setPreviewPurchaseOrder(po)}>Ver</button>
@@ -1500,7 +1503,7 @@ function Dashboard({ purchaseOrders, references }: { purchaseOrders: PurchaseOrd
     to: "",
     projectId: "",
     supplierId: "",
-    status: "",
+    status: "validated",
   });
 
   const [typeFilter, setTypeFilter] = useState("");
@@ -1522,23 +1525,32 @@ function Dashboard({ purchaseOrders, references }: { purchaseOrders: PurchaseOrd
     [references.categories, typeFilter],
   );
 
-  const filtered = useMemo(
+  // Filtra por tudo exceto o estado (para calcular também o valor "em preparação")
+  const baseFiltered = useMemo(
     () =>
       purchaseOrders.filter((po) => {
         if (filters.from && po.po_date < filters.from) return false;
         if (filters.to && po.po_date > filters.to) return false;
         if (filters.projectId && po.project_id !== filters.projectId) return false;
         if (filters.supplierId && po.supplier_id !== filters.supplierId) return false;
-        if (filters.status && po.status !== filters.status) return false;
         if (typeFilter && !(po.line_items ?? []).some((l) => l.category?.expense_type === typeFilter)) return false;
         if (subFilter && !(po.line_items ?? []).some((l) => l.category_id === subFilter)) return false;
         return true;
       }),
-    [filters, purchaseOrders, typeFilter, subFilter],
+    [filters.from, filters.to, filters.projectId, filters.supplierId, purchaseOrders, typeFilter, subFilter],
+  );
+  const filtered = useMemo(
+    () => baseFiltered.filter((po) => !filters.status || po.status === filters.status),
+    [baseFiltered, filters.status],
   );
 
-  const total = filtered.reduce((sum, po) => sum + Number(po.grand_total), 0);
+  // Valores líquidos (sem IVA)
+  const total = filtered.reduce((sum, po) => sum + Number(po.subtotal ?? 0), 0);
+  const totalWithVat = filtered.reduce((sum, po) => sum + Number(po.grand_total ?? 0), 0);
   const average = filtered.length ? total / filtered.length : 0;
+  const inPreparation = baseFiltered
+    .filter((po) => po.status === "draft" || po.status === "pending_approval")
+    .reduce((sum, po) => sum + Number(po.subtotal ?? 0), 0);
 
   return (
     <section className="work-section">
@@ -1565,11 +1577,17 @@ function Dashboard({ purchaseOrders, references }: { purchaseOrders: PurchaseOrd
           </select>
         </label>
       </div>
+      <p className="muted">
+        Valores líquidos (sem IVA).{" "}
+        {filters.status
+          ? `Só adjudicações com estado «${statusLabel(filters.status as PurchaseOrderStatus)}» — altere em Estado para ver todas.`
+          : "Todos os estados, incluindo rascunhos e rejeitadas."}
+      </p>
       <div className="kpi-grid">
-        <Kpi label="Valor total" value={money(total)} />
-        <Kpi label="Adjudicações criadas" value={String(filtered.length)} />
-        <Kpi label="Média por Adjudicação" value={money(average)} />
-        <Kpi label="Valor validado" value={money(filtered.filter((po) => po.status === "validated").reduce((sum, po) => sum + po.grand_total, 0))} />
+        <Kpi label="Valor líquido" value={money(total)} />
+        <Kpi label="Valor c/ IVA" value={money(totalWithVat)} />
+        <Kpi label="Adjudicações" value={`${filtered.length} · média ${money(average)}`} />
+        <Kpi label="Em preparação (rascunho + a aguardar)" value={money(inPreparation)} />
       </div>
       <div className="dashboard-grid">
         <SpendPanel title="Custo por obra" rows={groupSpend(filtered, (po) => po.project?.project_name ?? "Sem atribuição")} />
@@ -1648,7 +1666,7 @@ function Kpi({ label, value }: { label: string; value: string }) {
 
 function groupSpend(purchaseOrders: PurchaseOrder[], labelFor: (po: PurchaseOrder) => string) {
   const grouped = new Map<string, number>();
-  purchaseOrders.forEach((po) => grouped.set(labelFor(po), (grouped.get(labelFor(po)) ?? 0) + Number(po.grand_total)));
+  purchaseOrders.forEach((po) => grouped.set(labelFor(po), (grouped.get(labelFor(po)) ?? 0) + Number(po.subtotal ?? 0)));
   return [...grouped.entries()]
     .map(([label, value]) => ({ label, value }))
     .sort((a, b) => b.value - a.value)
@@ -1666,8 +1684,8 @@ function groupLineSpend(purchaseOrders: PurchaseOrder[]) {
 
   purchaseOrders.forEach((po) => {
     (po.line_items ?? []).forEach((line) => {
-      const label = formatCategoryLabel(line.category) || "Unassigned";
-      const value = Number(line.gross_total ?? line.quantity * line.rate * (1 + line.vat_rate / 100));
+      const label = formatCategoryLabel(line.category) || "Sem categoria";
+      const value = lineNet(line);
       grouped.set(label, (grouped.get(label) ?? 0) + value);
     });
   });
@@ -1872,7 +1890,7 @@ function PurchaseOrders({
               <th className="sortable" onClick={() => toggleSort("project")}>Obra <span className="sort-ind">{sortInd("project")}</span></th>
               <th className="sortable" onClick={() => toggleSort("supplier")}>Fornecedor <span className="sort-ind">{sortInd("supplier")}</span></th>
               <th className="sortable" onClick={() => toggleSort("status")}>Estado <span className="sort-ind">{sortInd("status")}</span></th>
-              <th className="sortable" onClick={() => toggleSort("grand_total")}>Total <span className="sort-ind">{sortInd("grand_total")}</span></th>
+              <th className="sortable num" onClick={() => toggleSort("grand_total")}>Líquido <span className="sort-ind">{sortInd("grand_total")}</span></th>
               <th className="actions-cell">Ações</th>
             </tr>
           </thead>
@@ -1895,7 +1913,10 @@ function PurchaseOrders({
                       <span className="devolucao-nota rejeitada" title={po.approval_comment}>✕ {po.approval_comment}</span>
                     )}
                   </td>
-                  <td>{money(po.grand_total)}</td>
+                  <td className="num">
+                    {money(po.subtotal)}
+                    <small className="muted" style={{ display: "block" }}>{money(po.grand_total)} c/ IVA</small>
+                  </td>
                   <td className="actions-cell">
                     <button className="icon-button" onClick={() => onPreview(po)} title="Pré-visualizar" aria-label="Pré-visualizar">
                       <Eye size={16} />
@@ -2007,15 +2028,19 @@ function POForm({
     [activeCategories],
   );
 
-  const [supplierId, setSupplierId] = useState(editingPurchaseOrder?.supplier_id ?? activeSuppliers[0]?.id ?? "");
-  const [projectId, setProjectId] = useState(editingPurchaseOrder?.project_id ?? activeProjects[0]?.id ?? "");
+  // Numa adjudicação nova, fornecedor e obra começam vazios (evita escolher o errado sem reparar).
+  // A obra só vem pré-preenchida se o utilizador tiver acesso a uma única obra.
+  const [supplierId, setSupplierId] = useState(editingPurchaseOrder?.supplier_id ?? "");
+  const [projectId, setProjectId] = useState(
+    editingPurchaseOrder?.project_id ?? (activeProjects.length === 1 ? activeProjects[0].id : ""),
+  );
   const requesterId = editingPurchaseOrder?.requester_id ?? currentStaff?.id ?? "";
   const requesterName = editingPurchaseOrder?.requester?.full_name ?? currentStaff?.full_name ?? "Sem registo de equipa correspondente";
   const requesterInitials =
     editingPurchaseOrder?.requester?.initials ||
     currentStaff?.initials ||
     initialsFromName(editingPurchaseOrder?.requester?.full_name ?? currentStaff?.full_name);
-  const initialProject = references.projects.find((item) => item.id === projectId) ?? activeProjects[0] ?? null;
+  const initialProject = references.projects.find((item) => item.id === projectId) ?? null;
   const defaultSiteContact = initialProject?.default_site_contacts || formatProjectSiteContact(initialProject);
   const [form, setForm] = useState({
     po_date: editingPurchaseOrder?.po_date ?? isoToday(),
@@ -2063,8 +2088,13 @@ function POForm({
 
   const supplier = references.suppliers.find((item) => item.id === supplierId) ?? null;
   const project = references.projects.find((item) => item.id === projectId) ?? null;
-  const subtotal = lines.reduce((sum, item) => sum + item.quantity * item.rate * (1 - (item.discount_pct ?? 0) / 100) * (1 - (item.discount_pct_2 ?? 0) / 100), 0);
-  const vatTotal = lines.reduce((sum, item) => sum + item.quantity * item.rate * (1 - (item.discount_pct ?? 0) / 100) * (1 - (item.discount_pct_2 ?? 0) / 100) * (item.vat_rate / 100), 0);
+  const subtotal = lines.reduce((sum, item) => sum + lineNetRaw(item), 0);
+  const vatTotal = lines.reduce((sum, item) => sum + lineNetRaw(item) * (item.vat_rate / 100), 0);
+  const grandTotal = subtotal + vatTotal;
+  // O limite de autoridade é com IVA
+  const myLimit = currentStaff?.authority_limit ?? null;
+  const iAmAdmin = normalizeRole(currentStaff?.role ?? "viewer") === "admin";
+  const overLimit = !iAmAdmin && myLimit !== null && grandTotal > myLimit;
 
   function updateLine(index: number, patch: Partial<PurchaseOrderLineDraft>) {
     setLines((current) => current.map((line, lineIndex) => (lineIndex === index ? { ...line, ...patch } : line)));
@@ -2258,7 +2288,7 @@ function POForm({
         {error && <div className="notice error">{error}</div>}
         {editingPurchaseOrder && (
           <div className="notice">
-            Editing purchase order <strong>{editingPurchaseOrder.po_number}</strong>. Saving will update the existing PO and replace its line items.
+            A editar a adjudicação <strong>{editingPurchaseOrder.po_number}</strong>. Ao guardar, a adjudicação existente é atualizada e as linhas são substituídas.
           </div>
         )}
         <div className="form-grid">
@@ -2583,18 +2613,18 @@ function POForm({
                     }
                   }}
                 />
-                <input type="number" min="0" step="1" value={line.quantity} onChange={(event) => updateLine(index, { quantity: Number(event.target.value) })} />
+                <input type="number" min="0" step="any" inputMode="decimal" value={line.quantity} onChange={(event) => updateLine(index, { quantity: Number(event.target.value) })} />
                 <input value={line.unit} onChange={(event) => updateLine(index, { unit: event.target.value })} />
-                <input type="number" min="0" step="1" value={line.rate} onChange={(event) => updateLine(index, { rate: Number(event.target.value) })} />
-                <input type="number" min="0" max="100" step="0.5" value={line.discount_pct ?? 0} onChange={(event) => updateLine(index, { discount_pct: Number(event.target.value) })} />
-                <input type="number" min="0" max="100" step="0.5" value={line.discount_pct_2 ?? 0} onChange={(event) => updateLine(index, { discount_pct_2: Number(event.target.value) })} />
+                <input type="number" min="0" step="any" inputMode="decimal" value={line.rate} onChange={(event) => updateLine(index, { rate: Number(event.target.value) })} />
+                <input type="number" min="0" max="100" step="any" inputMode="decimal" value={line.discount_pct ?? 0} onChange={(event) => updateLine(index, { discount_pct: Number(event.target.value) })} />
+                <input type="number" min="0" max="100" step="any" inputMode="decimal" value={line.discount_pct_2 ?? 0} onChange={(event) => updateLine(index, { discount_pct_2: Number(event.target.value) })} />
                 <select value={line.vat_rate} onChange={(event) => updateLine(index, { vat_rate: Number(event.target.value) })}>
                   <option value={23}>IVA 23%</option>
                   <option value={13}>IVA 13%</option>
                   <option value={6}>IVA 6%</option>
                   <option value={0}>Isento</option>
                 </select>
-                <strong>{money(line.quantity * line.rate * (1 - (line.discount_pct ?? 0) / 100) * (1 - (line.discount_pct_2 ?? 0) / 100))}</strong>
+                <strong>{money(lineNetRaw(line))}</strong>
                 <button type="button" className="icon-button danger" onClick={() => setLines(lines.filter((_, lineIndex) => lineIndex !== index))} title="Remover linha">
                   <Trash2 size={16} />
                 </button>
@@ -2645,16 +2675,21 @@ function POForm({
             <textarea value={form.delivery_instructions} onChange={(event) => setForm({ ...form, delivery_instructions: event.target.value })} />
           </label>
           <label className="wide">
-            Notes
+            Notas
             <textarea value={form.notes} onChange={(event) => setForm({ ...form, notes: event.target.value })} />
           </label>
         </div>
 
         <div className="totals-strip">
-          <span>Subtotal {money(subtotal)}</span>
-          <span>VAT {money(vatTotal)}</span>
-          <strong>Total {money(subtotal + vatTotal)}</strong>
+          <span>Líquido {money(subtotal)}</span>
+          <span>IVA {money(vatTotal)}</span>
+          <strong>Total c/ IVA {money(grandTotal)}</strong>
         </div>
+        {overLimit && myLimit !== null && (
+          <div className="notice">
+            Acima do seu limite de autoridade ({money(myLimit)} c/ IVA). Ao validar, a adjudicação é submetida para aprovação.
+          </div>
+        )}
         <div className="button-row">
           <button type="submit" disabled={busy}>
             <Save size={16} />
@@ -2663,7 +2698,7 @@ function POForm({
           {editingPurchaseOrder && (
             <button type="button" className="secondary" onClick={onDone}>
               <X size={16} />
-              Cancel edit
+              Cancelar edição
             </button>
           )}
           {!editingPurchaseOrder && (
@@ -2797,9 +2832,6 @@ function PreviewModal({ po, settings, onClose, canWrite, currentStaff, onRefresh
 // mesmo valor ("Transporte"). A última página fecha com o Total líquido.
 const LINHAS_POR_PAGINA = 28; // calibrado para caber numa A4 com cabeçalho
 
-function lineNet(line: PurchaseOrderLineItem): number {
-  return line.line_total ?? line.quantity * line.rate * (1 - (line.discount_pct ?? 0) / 100) * (1 - (line.discount_pct_2 ?? 0) / 100);
-}
 
 function PoLinesPaginated({ lines }: { lines: PurchaseOrderLineItem[] }) {
   // dividir em páginas
@@ -2896,8 +2928,7 @@ function PurchaseOrderPreview({ po, company }: { po: PurchaseOrder; company: Rec
     const map = new Map<string, number>();
     (po.line_items ?? []).forEach((line) => {
       const code = line.category?.category_code ?? "—";
-      const value = line.line_total ?? line.quantity * line.rate * (1 - (line.discount_pct ?? 0) / 100);
-      map.set(code, (map.get(code) ?? 0) + value);
+      map.set(code, (map.get(code) ?? 0) + lineNet(line));
     });
     return Array.from(map.entries()).map(([code, value]) => ({ code, value }));
   })();
