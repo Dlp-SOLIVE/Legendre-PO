@@ -1,3 +1,7 @@
+/* Fontes: Inter (texto) e Plus Jakarta Sans (títulos e números) — antes a Inter estava declarada mas nunca era carregada,
+   e o browser usava a fonte do sistema (Segoe UI no Windows), a negrito em quase todo o lado. */
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700&display=swap");
+
 :root {
   color-scheme: light;
   /* Design tokens — paleta oficial Legendre */
@@ -2107,3 +2111,79 @@ tbody tr:hover > td { background: #fafbfc; }
   .admin-split { grid-template-columns: 1fr; }
   .admin-split > .admin-editor { max-height: none; position: static; }
 }
+
+
+/* ═══════════════════════════════════════════════════════════════
+   Fase 6 · Tipografia e escala (interface)
+   Texto em Inter 14 px, pesos 400–600; títulos e números em Plus Jakarta Sans.
+   ═══════════════════════════════════════════════════════════════ */
+:root {
+  --font-text: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-display: "Plus Jakarta Sans", "Inter", ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-text);
+}
+body { font-size: 14px; line-height: 1.5; -webkit-font-smoothing: antialiased; }
+button, input, select, textarea { font-family: inherit; }
+
+h1, h2, h3, h4,
+.topbar h1,
+.po-block-title,
+.kpi strong,
+.totals-strip strong {
+  font-family: var(--font-display);
+  letter-spacing: -0.01em;
+}
+.topbar h1 { font-size: 26px; font-weight: 700; line-height: 1.2; margin: 0; }
+.eyebrow { font-size: 11px; font-weight: 600; letter-spacing: 0.08em; }
+.work-section h2, .section-heading h2 { font-size: 18px; font-weight: 700; }
+.panel h3, .po-block-title, .line-editor .section-heading h2.po-block-title { font-size: 16px; font-weight: 700; }
+
+/* Texto de interface: menos negrito */
+label { font-size: 12.5px; font-weight: 500; color: var(--muted); }
+button { font-size: 14px; font-weight: 600; }
+.nav-item { font-size: 14px; font-weight: 500; }
+.nav-item.active { font-weight: 600; }
+.sidebar .nav-group { font-size: 11px; font-weight: 600; }
+input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), select, textarea { font-size: 14px; font-weight: 400; }
+.readonly-field strong { font-weight: 600; }
+.muted, small { font-weight: 400; }
+
+/* Tabelas */
+table { font-size: 13.5px; }
+th { font-size: 11.5px; font-weight: 600; letter-spacing: 0.04em; }
+td strong { font-weight: 600; }
+.status-pill { font-size: 12px; font-weight: 600; }
+.user-strip .role-pill { font-size: 12px; font-weight: 600; }
+
+/* Indicadores numa faixa única com divisórias (como na plataforma de Pós-Venda) */
+.kpi-grid {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  gap: 0;
+  overflow: hidden;
+}
+.kpi,
+button.kpi {
+  align-items: center;
+  border: 0 !important;
+  border-radius: 0;
+  border-right: 1px solid var(--line) !important;
+  gap: 2px;
+  padding: 16px 12px;
+  text-align: center;
+}
+.kpi:last-child, button.kpi:last-child { border-right: 0 !important; }
+.kpi span { font-size: 13px; font-weight: 500; color: var(--muted); order: 1; }
+.kpi strong { font-size: 26px; font-weight: 700; line-height: 1.15; order: 2; }
+/* cartões que pedem ação (devolvidas, entregas em atraso) quando têm contagem */
+button.kpi[style*="--red"] { background: var(--red-tint); }
+button.kpi[style*="--red"] span { color: var(--red-text); font-weight: 600; }
+button.kpi[style*="--red"] strong { color: var(--red-text); }
+@media (max-width: 720px) {
+  .kpi, button.kpi { border-bottom: 1px solid var(--line) !important; }
+}
+
+/* Totais */
+.totals-strip { font-size: 14px; }
+.totals-strip strong { font-size: 17px; font-weight: 700; }
