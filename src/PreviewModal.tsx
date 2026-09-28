@@ -412,14 +412,16 @@ export function PurchaseOrderPreview({ po, company }: { po: PurchaseOrder; compa
               )}
               {!assinaturaUrl && <div className="po-sign-line" />}
               {po.validator ? (
-                <div className="po-sign-validation">
-                  <span className="po-sign-name">{po.validator.full_name}</span>
-                  <span className="po-sign-date">
+                <div className="po-sign-validation" style={{ display: "flex", flexDirection: "column", gap: 2, marginTop: 6 }}>
+                  <div className="po-sign-name" style={{ fontSize: 11, fontWeight: 600, fontStyle: "normal", color: "#1a1a1a" }}>
+                    {po.validator.full_name}
+                  </div>
+                  <div className="po-sign-date" style={{ fontSize: 10, color: "#444" }}>
                     Validado eletronicamente{po.validated_at ? ` em ${shortDate(po.validated_at)}` : ""}
-                  </span>
+                  </div>
                 </div>
               ) : (
-                <span className="po-sign-date">Documento não validado</span>
+                <div className="po-sign-date" style={{ fontSize: 10, color: "#444", marginTop: 6 }}>Documento não validado</div>
               )}
             </div>
             <div className="po-sign-block">
