@@ -72,6 +72,7 @@ export function Dashboard({
   const total = filtered.reduce((sum, po) => sum + Number(po.subtotal ?? 0), 0);
   const totalWithVat = filtered.reduce((sum, po) => sum + Number(po.grand_total ?? 0), 0);
   const average = filtered.length ? total / filtered.length : 0;
+  const obraRows = groupSpend(filtered, (po) => po.project?.project_name ?? "Sem atribuição");
   const inPreparation = baseFiltered
     .filter((po) => po.status === "draft" || po.status === "pending_approval")
     .reduce((sum, po) => sum + Number(po.subtotal ?? 0), 0);
@@ -132,16 +133,15 @@ export function Dashboard({
           ? `Só adjudicações com estado «${statusLabel(filters.status as PurchaseOrderStatus)}» — altere em Estado para ver todas.`
           : "Todos os estados, incluindo rascunhos e rejeitadas."}
       </p>
-      <div className="kpi-grid">
-        <Kpi label="Valor líquido" value={money(total)} />
-        <Kpi label="Valor c/ IVA" value={money(totalWithVat)} />
-        <Kpi label="Adjudicações" value={`${filtered.length} · média ${money(average)}`} />
-        <Kpi label="Em preparação (rascunho + a aguardar)" value={money(inPreparation)} />
+      <div className="kpi-grid kpi-grid-3">
+        <Kpi label="Valor líquido" value={money(total)} sub={`c/ IVA ${money(totalWithVat)}`} />
+        <Kpi label="Adjudicações" value={String(filtered.length)} sub={filtered.length ? `média ${money(average)}` : undefined} />
+        <Kpi label="Em preparação" value={money(inPreparation)} sub="rascunho + a aguardar" />
       </div>
       <div className="dashboard-grid">
-        <SpendPanel title="Custo por obra" rows={groupSpend(filtered, (po) => po.project?.project_name ?? "Sem atribuição")} />
+        {obraRows.length > 1 && <SpendPanel title="Custo por obra" rows={obraRows} />}
         <SpendPanel title="Custo por fornecedor" rows={groupSpend(filtered, (po) => po.supplier?.supplier_name ?? "Sem atribuição")} />
-        <SpendPanel title="Custo por categoria" rows={groupLineSpend(filtered)} />
+        <SpendPanel title="Custo por categoria" rows={groupLineSpend(filtered).map((r) => ({ ...r, full: r.label, label: shortCategory(r.label) }))} />
         <RecentOrders
           purchaseOrders={[...filtered]
             .sort((x, y) => String(y.po_date).localeCompare(String(x.po_date)) || String(y.created_at ?? "").localeCompare(String(x.created_at ?? "")))
@@ -208,13 +208,24 @@ export function FilterBar({
   );
 }
 
-export function Kpi({ label, value }: { label: string; value: string }) {
+export function Kpi({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
     <div className="kpi">
       <span>{label}</span>
       <strong>{value}</strong>
+      {sub && <small className="kpi-sub">{sub}</small>}
     </div>
   );
+}
+
+// "SECONDARY BUILDING TRADES SUB-CONTRACTORS - SITE CLEANING (OPS44)" -> "Site cleaning (OPS44)"
+export function shortCategory(label: string) {
+  const last = label.split(" - ").pop() ?? label;
+  const m = last.match(/^(.*?)(\s*\([^)]*\))?$/);
+  const name = (m?.[1] ?? last).trim().toLowerCase();
+  const code = (m?.[2] ?? "").trim();
+  const nice = name ? name.charAt(0).toUpperCase() + name.slice(1) : last;
+  return code ? `${nice} ${code}` : nice;
 }
 
 export function groupSpend(purchaseOrders: PurchaseOrder[], labelFor: (po: PurchaseOrder) => string) {
@@ -243,19 +254,21 @@ export function groupLineSpend(purchaseOrders: PurchaseOrder[]) {
     .slice(0, 8);
 }
 
-export function SpendPanel({ title, rows }: { title: string; rows: { label: string; value: number }[] }) {
+export function SpendPanel({ title, rows }: { title: string; rows: { label: string; value: number; full?: string }[] }) {
   const max = Math.max(...rows.map((row) => row.value), 1);
   return (
     <div className="panel">
       <h3>{title}</h3>
-      <div className="bar-list">
+      <div className="spend-list">
         {rows.map((row) => (
-          <div className="bar-row" key={row.label}>
-            <span>{row.label}</span>
-            <div>
-              <i style={{ width: `${Math.max(4, (row.value / max) * 100)}%` }} />
+          <div className="spend-row" key={row.full ?? row.label} title={row.full ?? row.label}>
+            <div className="spend-head">
+              <span>{row.label}</span>
+              <strong className={row.value < 0 ? "neg" : undefined}>{money(row.value)}</strong>
             </div>
-            <strong>{money(row.value)}</strong>
+            <div className="spend-track">
+              <i style={{ width: row.value > 0 ? `${Math.max(2, (row.value / max) * 100)}%` : 0 }} />
+            </div>
           </div>
         ))}
         {!rows.length && <p className="muted">Nenhuma adjudicação corresponde aos filtros.</p>}
@@ -266,20 +279,28 @@ export function SpendPanel({ title, rows }: { title: string; rows: { label: stri
 
 export function RecentOrders({ purchaseOrders }: { purchaseOrders: PurchaseOrder[] }) {
   return (
-    <div className="panel">
+    <div className="panel panel-wide">
       <h3>Adjudicações recentes</h3>
-      <div className="compact-list">
-        {purchaseOrders.map((po) => (
-          <div key={po.id}>
-            <strong>{po.po_number}</strong>
-            <span>
-              {shortDate(po.po_date)} · {po.supplier?.supplier_name ?? "Fornecedor"} · {money(po.subtotal)} ·{" "}
-              <span className={`status-pill ${po.status}`}>{statusLabel(po.status)}</span>
-            </span>
-          </div>
-        ))}
-        {!purchaseOrders.length && <p className="muted">Sem adjudicações recentes.</p>}
-      </div>
+      {purchaseOrders.length ? (
+        <table className="recent-table">
+          <thead>
+            <tr><th>Nº</th><th>Data</th><th>Fornecedor</th><th className="num">Valor líquido</th><th>Estado</th></tr>
+          </thead>
+          <tbody>
+            {purchaseOrders.map((po) => (
+              <tr key={po.id}>
+                <td><strong>{po.po_number}</strong></td>
+                <td>{shortDate(po.po_date)}</td>
+                <td className="recent-supplier" title={po.supplier?.supplier_name ?? ""}>{po.supplier?.supplier_name ?? "Fornecedor"}</td>
+                <td className={`num${Number(po.subtotal ?? 0) < 0 ? " neg" : ""}`}>{money(po.subtotal)}</td>
+                <td><span className={`status-pill ${po.status}`}>{statusLabel(po.status)}</span></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      ) : (
+        <p className="muted">Sem adjudicações recentes.</p>
+      )}
     </div>
   );
 }
