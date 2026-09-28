@@ -702,7 +702,7 @@ export function POForm({
                 />
                 {selectedExpenseType && <small className="muted" style={{ fontSize: "0.72rem" }}>{selectedExpenseType}</small>}
                 </div>
-                <input type="number" min="0" step="any" inputMode="decimal" value={line.quantity} onChange={(event) => updateLine(index, { quantity: Number(event.target.value) })} />
+                <input type="number" step="any" inputMode="decimal" title="Use valor negativo (ex.: -5) para devoluções/trocas" className={line.quantity < 0 ? "qty-negative" : undefined} value={line.quantity} onChange={(event) => updateLine(index, { quantity: Number(event.target.value) })} />
                 <input value={line.unit} onChange={(event) => updateLine(index, { unit: event.target.value })} />
                 <input type="number" min="0" step="any" inputMode="decimal" value={line.rate} onChange={(event) => updateLine(index, { rate: Number(event.target.value) })} />
                 <input type="number" min="0" max="100" step="any" inputMode="decimal" value={line.discount_pct ?? 0} onChange={(event) => updateLine(index, { discount_pct: Number(event.target.value) })} />
