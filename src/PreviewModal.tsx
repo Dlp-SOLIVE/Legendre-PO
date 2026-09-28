@@ -79,8 +79,20 @@ export function PreviewModal({ po, settings, onClose, canWrite, currentStaff, on
     };
 
     window.addEventListener("afterprint", restoreTitle, { once: true });
-    window.print();
-    window.setTimeout(restoreTitle, 1200);
+    // Esperar que as imagens (logótipo, assinatura+carimbo) estejam carregadas antes de
+    // abrir a impressão — senão a assinatura pode sair em branco no PDF.
+    const imagens = Array.from(document.querySelectorAll<HTMLImageElement>(".print-area img"));
+    const pendentes = imagens
+      .filter((img) => !img.complete)
+      .map((img) => new Promise<void>((resolve) => {
+        img.addEventListener("load", () => resolve(), { once: true });
+        img.addEventListener("error", () => resolve(), { once: true });
+      }));
+    const limite = new Promise<void>((resolve) => window.setTimeout(resolve, 4000));
+    void Promise.race([Promise.all(pendentes), limite]).then(() => {
+      window.print();
+      window.setTimeout(restoreTitle, 1200);
+    });
   }
 
   return (
@@ -395,13 +407,19 @@ export function PurchaseOrderPreview({ po, company }: { po: PurchaseOrder; compa
           <div className="po-signatures">
             <div className="po-sign-block">
               <span className="po-sign-label">Pela LEGDR</span>
-              {assinaturaUrl ? (
-                <>
-                  <img className="po-sign-image" src={assinaturaUrl} alt="Assinatura e carimbo" />
-                  <span className="po-sign-name">{po.validator?.full_name}</span>
-                </>
+              {assinaturaUrl && (
+                <img className="po-sign-image" src={assinaturaUrl} alt="Assinatura e carimbo" />
+              )}
+              {!assinaturaUrl && <div className="po-sign-line" />}
+              {po.validator ? (
+                <div className="po-sign-validation">
+                  <span className="po-sign-name">{po.validator.full_name}</span>
+                  <span className="po-sign-date">
+                    Validado eletronicamente{po.validated_at ? ` em ${shortDate(po.validated_at)}` : ""}
+                  </span>
+                </div>
               ) : (
-                <div className="po-sign-line" />
+                <span className="po-sign-date">Documento não validado</span>
               )}
             </div>
             <div className="po-sign-block">
