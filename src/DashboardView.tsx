@@ -80,7 +80,7 @@ export function Dashboard({
   return (
     <section className="work-section">
       <div className="section-heading">
-        <h2>O que precisa de mim</h2>
+        <h2>Ações pendentes</h2>
       </div>
       <div className="kpi-grid">
         {needs.map((item) => (
