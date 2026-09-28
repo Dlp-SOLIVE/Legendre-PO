@@ -2196,3 +2196,48 @@ button.kpi[style*="--red"] strong { color: var(--red-text); }
 
 /* Quantidade negativa (devolução/troca) no formulário da adjudicação */
 input.qty-negative { color: var(--danger); font-weight: 600; }
+
+
+/* ═══════════════════════════════════════════════════════════════
+   Fase 7 · Dashboard mais calmo e cabeçalho do documento
+   Paleta Legendre: navy #143B68 · vermelho #E62336 · cinzento #C4C4C4
+   ═══════════════════════════════════════════════════════════════ */
+/* Indicadores: 3 em vez de 4, com linha secundária */
+.kpi-grid.kpi-grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.kpi .kpi-sub { order: 3; font-size: 12.5px; color: var(--muted); font-weight: 400; }
+/* Painéis: nome e valor na mesma linha, barra fina por baixo (os valores já não saem do cartão) */
+.dashboard-grid .panel { padding: 18px 20px; min-width: 0; }
+.dashboard-grid .panel-wide { grid-column: 1 / -1; }
+.spend-list { display: grid; gap: 12px; margin-top: 12px; }
+.spend-row { display: grid; gap: 5px; min-width: 0; }
+.spend-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; min-width: 0; }
+.spend-head span { font-size: 13.5px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.spend-head strong { font-size: 13.5px; font-weight: 600; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.spend-track { height: 6px; background: #eef0f3; border-radius: 999px; overflow: hidden; }
+.spend-track i { display: block; height: 100%; background: #143B68; border-radius: 999px; }
+.neg { color: #C41D2D !important; }
+/* Adjudicações recentes: tabela, não uma frase por linha */
+.recent-table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 13.5px; }
+.recent-table th { text-align: left; font-size: 11.5px; font-weight: 600; color: var(--muted); padding: 8px 10px; border-bottom: 1px solid var(--line); }
+.recent-table td { padding: 9px 10px; border-bottom: 1px solid #f1f2f4; vertical-align: middle; }
+.recent-table tr:last-child td { border-bottom: 0; }
+.recent-table .num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.recent-table .recent-supplier { max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 900px) { .kpi-grid.kpi-grid-3 { grid-template-columns: 1fr; } .recent-table th:nth-child(2), .recent-table td:nth-child(2) { display: none; } }
+
+/* Cabeçalho do documento: dados legais alinhados, sem repetir "Legendre", filete vermelho */
+.po-header { align-items: center; padding-bottom: 12px; border-bottom: 2px solid #E62336; }
+.po-company { display: flex; flex-direction: column; align-items: flex-end; gap: 1px; max-width: 320px; font-size: 11px; line-height: 1.4; color: #4a5160; text-align: right; }
+.po-company strong { font-size: 12px; font-weight: 600; color: #143B68; }
+.po-doc-ref { display: flex; justify-content: space-between; align-items: baseline; margin: 14px 0 16px; padding-bottom: 8px; border-bottom: 1px solid #C4C4C4; }
+.po-doc-ref span { font-size: 15px; font-weight: 700; color: #143B68; }
+.po-doc-ref strong { font-size: 12px; font-weight: 600; color: #4a5160; }
+.po-clausulas { margin-top: 0; }
+@media print {
+  .po-header { padding-bottom: 8px; }
+  .po-company { font-size: 8.5px; max-width: 260px; }
+  .po-company strong { font-size: 9.5px; }
+  .po-doc-ref { margin: 10px 0 12px; }
+  .po-doc-ref span { font-size: 12px; }
+  .po-doc-ref strong { font-size: 9.5px; }
+}
