@@ -2187,3 +2187,12 @@ button.kpi[style*="--red"] strong { color: var(--red-text); }
 /* Totais */
 .totals-strip { font-size: 14px; }
 .totals-strip strong { font-size: 17px; font-weight: 700; }
+
+/* Assinatura/validação no documento (nome + data de validação, também no PDF) */
+.po-sign-validation { display: flex; flex-direction: column; gap: 2px; margin-top: 4px; }
+.po-sign-date { display: block; font-size: 10.5px; color: #444; margin-top: 2px; }
+.po-sign-block .po-sign-line + .po-sign-validation,
+.po-sign-block .po-sign-line + .po-sign-date { margin-top: 6px; }
+
+/* Quantidade negativa (devolução/troca) no formulário da adjudicação */
+input.qty-negative { color: var(--danger); font-weight: 600; }
