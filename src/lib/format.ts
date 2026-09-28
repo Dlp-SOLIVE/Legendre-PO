@@ -1,8 +1,8 @@
+// Milhares com ponto e sempre agrupados: 6.147,00 € e 11.963,91 €.
+// (Em pt-PT o Intl não agrupa números de 4 algarismos e usa espaço: "6147,00 €" ao lado de "11 963,91 €".)
+const eur = new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR" });
 export function money(value: number | null | undefined) {
-  return new Intl.NumberFormat("pt-PT", {
-    style: "currency",
-    currency: "EUR",
-  }).format(Number(value ?? 0));
+  return eur.format(Number(value ?? 0));
 }
 
 // Aceita "2026-09-24" ou um carimbo completo ("2026-09-24T10:12:00Z"); antes, um carimbo completo dava data inválida.
