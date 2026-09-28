@@ -275,21 +275,7 @@ export function PurchaseOrderPreview({ po, company }: { po: PurchaseOrder; compa
   return (
     <div className="print-area">
       <article className="po-page po-order-page">
-        <header className="po-header">
-          <img className="po-logo-image" src={legendreLogo} alt="Legendre" />
-          <div className="po-company">
-            <strong>{company.name ?? "Legendre"}</strong>
-            {(company.legal_name ?? "LEGDR Engenharia e Construção, Lda") && (
-              <span>{company.legal_name ?? "LEGDR Engenharia e Construção, Lda"}</span>
-            )}
-            {(company.vat_number ?? "") && (
-              <span>NIF: {company.vat_number}</span>
-            )}
-            <span>{company.address ?? ""}</span>
-            <span>{company.phone ?? ""}</span>
-            <span>{company.email ?? ""}</span>
-          </div>
-        </header>
+        <PoHeader company={company} />
         <h2 className="po-title">Adjudicação</h2>
         <section className="po-meta-grid">
           <div className="po-number-cell">
@@ -391,13 +377,10 @@ export function PurchaseOrderPreview({ po, company }: { po: PurchaseOrder; compa
       </article>
       {po.include_terms_conditions && (
         <article className="po-page clausulas-page">
-          <div className="po-clausulas-header">
-            <img className="po-logo-image" src={legendreLogo} alt="Legendre" />
-            <div className="po-company">
-              <strong>{company.name ?? "Legendre"}</strong>
-              <span>{company.legal_name ?? "LEGDR Engenharia e Construção, Unipessoal Lda"}</span>
-              {company.vat_number && <span>NIF: {company.vat_number}</span>}
-            </div>
+          <PoHeader company={company} />
+          <div className="po-doc-ref">
+            <span>Condições gerais da adjudicação</span>
+            <strong>{po.po_number}{po.revision ? ` · Rev. ${po.revision}` : ""}</strong>
           </div>
           <ol className="po-clausulas">
             {clausulasAdjudicacao.map((clausula, index) => (
@@ -432,6 +415,24 @@ export function PurchaseOrderPreview({ po, company }: { po: PurchaseOrder; compa
         </article>
       )}
     </div>
+  );
+}
+
+// Cabeçalho do documento (página da adjudicação e página das condições gerais).
+// O logótipo já diz "Legendre": o bloco da direita mostra só os dados legais, sem linhas vazias.
+export function PoHeader({ company }: { company: Record<string, string> }) {
+  const legalName = company.legal_name || "LEGDR Engenharia e Construção, Unipessoal Lda";
+  const contactos = [company.phone, company.email].filter(Boolean).join(" · ");
+  return (
+    <header className="po-header">
+      <img className="po-logo-image" src={legendreLogo} alt="Legendre" />
+      <div className="po-company">
+        <strong>{legalName}</strong>
+        {company.vat_number && <span>NIF {company.vat_number}</span>}
+        {company.address && <span>{company.address}</span>}
+        {contactos && <span>{contactos}</span>}
+      </div>
+    </header>
   );
 }
 
