@@ -730,7 +730,7 @@ export function ProcurementShell({ session }: { session: Session }) {
                 onDelete={(id) => deleteRow("suppliers", id)}
                 onRefresh={refreshView}
                 allowCreate={canManageSuppliers}
-                allowEdit={canAdmin}
+                allowEdit={canManageSuppliers}
                 allowDelete={canAdmin}
               />
             )}
