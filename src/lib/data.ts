@@ -776,3 +776,22 @@ export async function loadPriceSupplierCounts(projectId: string): Promise<Record
   }
   return contagem;
 }
+
+// Rubricas (obra + rubrica) com preço faturado diferente do adjudicado — etiqueta nos Accruals.
+export async function loadPriceDivergences(): Promise<Set<string>> {
+  const client = requireClient();
+  const keys = new Set<string>();
+  const pageSize = 1000;
+  for (let from = 0; from < 50000; from += pageSize) {
+    const { data, error } = await client
+      .from("v_line_reconciliation")
+      .select("project_id, category_id")
+      .eq("price_divergence", true)
+      .range(from, from + pageSize - 1);
+    if (error) throw error;
+    const rows = (data ?? []) as { project_id: string; category_id: string | null }[];
+    rows.forEach((row) => keys.add(`${row.project_id}__${row.category_id ?? "none"}`));
+    if (rows.length < pageSize) break;
+  }
+  return keys;
+}
