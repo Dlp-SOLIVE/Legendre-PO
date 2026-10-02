@@ -5,6 +5,12 @@ export function money(value: number | null | undefined) {
   return eur.format(Number(value ?? 0));
 }
 
+// KPIs e limites: arredondado, sem cêntimos (ex.: 12.180 €)
+const eurRound = new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR", maximumFractionDigits: 0, minimumFractionDigits: 0 });
+export function moneyRound(value: number | null | undefined) {
+  return eurRound.format(Math.round(Number(value ?? 0)));
+}
+
 // Aceita "2026-09-24" ou um carimbo completo ("2026-09-24T10:12:00Z"); antes, um carimbo completo dava data inválida.
 export function shortDate(value: string | null | undefined) {
   if (!value) return "";
