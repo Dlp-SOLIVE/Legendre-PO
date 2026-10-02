@@ -755,3 +755,24 @@ export async function loadPriceProjectCounts(supplierId: string): Promise<Record
   });
   return contagem;
 }
+
+// Quantos artigos de preçário tem cada fornecedor nesta obra (lista de fornecedores da Nova adjudicação).
+export async function loadPriceSupplierCounts(projectId: string): Promise<Record<string, number>> {
+  const client = requireClient();
+  const contagem: Record<string, number> = {};
+  const pageSize = 1000;
+  for (let from = 0; from < 50000; from += pageSize) {
+    const { data, error } = await client
+      .from("supplier_price_items")
+      .select("supplier_id")
+      .eq("project_id", projectId)
+      .range(from, from + pageSize - 1);
+    if (error) throw error;
+    const rows = (data ?? []) as { supplier_id: string }[];
+    rows.forEach((r) => {
+      contagem[r.supplier_id] = (contagem[r.supplier_id] ?? 0) + 1;
+    });
+    if (rows.length < pageSize) break;
+  }
+  return contagem;
+}
