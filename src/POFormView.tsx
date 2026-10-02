@@ -45,6 +45,14 @@ export type PurchaseOrderLineDraft = PurchaseOrderLineItem & {
 
 // Unidades habituais (lista de sugestão; pode escrever-se outra)
 const UNIDADES = ["un", "m", "m²", "m³", "kg", "ton", "l", "vg", "h", "dia", "mês"];
+const UNIDADE_OUTRA = "__outra__";
+// "M3", "m3", "UN", "Un." → forma da lista (m³, un); outras ficam como vêm
+function normalizarUnidade(unidade: string): string {
+  const u = unidade.trim().toLowerCase().replace(/\.$/, "");
+  const mapa: Record<string, string> = { m2: "m²", m3: "m³", und: "un", uni: "un", unid: "un", ud: "un", t: "ton", lt: "l", vg: "vg", hr: "h", hora: "h", horas: "h", dias: "dia", meses: "mês", mes: "mês" };
+  const final = mapa[u] ?? u;
+  return UNIDADES.includes(final) ? final : unidade.trim();
+}
 
 const STEP_TITLES = ["Obra e fornecedor", "Artigos", "Entrega", "Rever e validar"];
 const CONTACT_ALL = "__todos__";
@@ -331,7 +339,7 @@ export function POForm({
           item_ref: n.item_ref,
           description: n.description,
           quantity: n.quantity,
-          unit: n.unit,
+          unit: normalizarUnidade(n.unit),
           rate: n.rate,
         }),
       ),
@@ -720,11 +728,6 @@ export function POForm({
                   <button type="button" className="ghost sm" onClick={() => setSelectedLines(new Set())}>Limpar seleção</button>
                 </div>
               )}
-              <datalist id="unidades-list">
-                {UNIDADES.map((unidade) => (
-                  <option value={unidade} key={unidade} />
-                ))}
-              </datalist>
               <datalist id="subcategorias-list">
                 {[...currentCategories]
                   .sort((x, y) => catLabel(x).localeCompare(catLabel(y), "pt", { numeric: true }))
@@ -813,8 +816,27 @@ export function POForm({
                               <input type="number" step="any" inputMode="decimal" title="Use valor negativo (ex.: -5) para devoluções/trocas" className={line.quantity < 0 ? "qty-negative" : undefined} value={line.quantity} onChange={(event) => updateLine(index, { quantity: Number(event.target.value) })} aria-label="Quantidade" />
                               <label className="unit-wrap">
                                 Unid.
-                                <input className="unit-input" list="unidades-list" value={line.unit} onChange={(event) => updateLine(index, { unit: event.target.value })} aria-label="Unidade" />
+                                <select
+                                  className="unit-select"
+                                  value={UNIDADES.includes(line.unit.trim()) ? line.unit.trim() : UNIDADE_OUTRA}
+                                  onChange={(event) => updateLine(index, { unit: event.target.value === UNIDADE_OUTRA ? "" : event.target.value })}
+                                  aria-label="Unidade"
+                                >
+                                  {UNIDADES.map((unidade) => (
+                                    <option value={unidade} key={unidade}>{unidade}</option>
+                                  ))}
+                                  <option value={UNIDADE_OUTRA}>Outra…</option>
+                                </select>
                               </label>
+                              {!UNIDADES.includes(line.unit.trim()) && (
+                                <input
+                                  className="unit-input"
+                                  placeholder="Qual?"
+                                  value={line.unit}
+                                  onChange={(event) => updateLine(index, { unit: event.target.value })}
+                                  aria-label="Outra unidade"
+                                />
+                              )}
                             </td>
                             <td className="num col-price">
                               <input type="number" min="0" step="any" inputMode="decimal" value={line.rate} onChange={(event) => updateLine(index, { rate: Number(event.target.value) })} aria-label="Preço unitário" />
