@@ -43,6 +43,9 @@ export type PurchaseOrderLineDraft = PurchaseOrderLineItem & {
   category_source?: FonteSugestao;
 };
 
+// Unidades habituais (lista de sugestão; pode escrever-se outra)
+const UNIDADES = ["un", "m", "m²", "m³", "kg", "ton", "l", "vg", "h", "dia", "mês"];
+
 const STEP_TITLES = ["Obra e fornecedor", "Artigos", "Entrega", "Rever e validar"];
 const CONTACT_ALL = "__todos__";
 const CONTACT_OTHER = "__outro__";
@@ -717,6 +720,11 @@ export function POForm({
                   <button type="button" className="ghost sm" onClick={() => setSelectedLines(new Set())}>Limpar seleção</button>
                 </div>
               )}
+              <datalist id="unidades-list">
+                {UNIDADES.map((unidade) => (
+                  <option value={unidade} key={unidade} />
+                ))}
+              </datalist>
               <datalist id="subcategorias-list">
                 {[...currentCategories]
                   .sort((x, y) => catLabel(x).localeCompare(catLabel(y), "pt", { numeric: true }))
@@ -803,10 +811,14 @@ export function POForm({
                             </td>
                             <td className="num col-qty">
                               <input type="number" step="any" inputMode="decimal" title="Use valor negativo (ex.: -5) para devoluções/trocas" className={line.quantity < 0 ? "qty-negative" : undefined} value={line.quantity} onChange={(event) => updateLine(index, { quantity: Number(event.target.value) })} aria-label="Quantidade" />
-                              <input className="unit-input" value={line.unit} onChange={(event) => updateLine(index, { unit: event.target.value })} aria-label="Unidade" />
+                              <label className="unit-wrap">
+                                Unid.
+                                <input className="unit-input" list="unidades-list" value={line.unit} onChange={(event) => updateLine(index, { unit: event.target.value })} aria-label="Unidade" />
+                              </label>
                             </td>
                             <td className="num col-price">
                               <input type="number" min="0" step="any" inputMode="decimal" value={line.rate} onChange={(event) => updateLine(index, { rate: Number(event.target.value) })} aria-label="Preço unitário" />
+                              {line.unit.trim() && <span className="per-unit">€ / {line.unit.trim()}</span>}
                             </td>
                             <td className="num"><strong>{money(lineNetRaw(line))}</strong></td>
                             <td>

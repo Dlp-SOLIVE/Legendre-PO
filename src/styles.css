@@ -3050,7 +3050,9 @@ button.primary.sm, button.outline.sm { gap: 6px; }
 .lines-table .col-rubrica { min-width: 170px; }
 .lines-table .col-rubrica small { display: block; font-size: 11px; margin-top: 2px; }
 .lines-table .col-qty input { width: 84px; }
-.lines-table .col-qty input.unit-input { margin-top: 4px; width: 84px; }
+.lines-table .col-qty .unit-wrap { align-items: center; color: var(--color-black-70); display: flex; font-size: 12px; gap: 4px; justify-content: flex-end; margin-top: 4px; white-space: nowrap; }
+.lines-table .col-qty input.unit-input { display: inline-block; font-size: 12px; margin-top: 0; min-height: 28px; padding: 3px 6px; text-align: right; width: 56px; }
+.lines-table .col-price .per-unit { color: var(--color-black-70); display: block; font-size: 11px; margin-top: 4px; text-align: right; white-space: nowrap; }
 .lines-table .col-price input { width: 96px; }
 .lines-table .col-disc input { width: 64px; }
 .lines-table .col-disc input + input { margin-top: 4px; }
