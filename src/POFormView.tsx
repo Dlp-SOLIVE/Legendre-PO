@@ -1,11 +1,22 @@
 import type React from "react";
-import { useMemo, useRef, useState } from "react";
-import { Check, Plus, Save, Trash2, X, ClipboardPaste, Tags } from "lucide-react";
-import { createPurchaseOrder, normalizeRole, updatePurchaseOrder, loadPriceItems, revisePurchaseOrder, type PurchaseOrderDraft } from "./lib/data";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { ArrowLeft, ArrowRight, Check, CircleCheck, ClipboardPaste, Plus, Save, Search, Send, Trash2, X } from "lucide-react";
+import {
+  createPurchaseOrder,
+  loadPriceItems,
+  loadPriceSupplierCounts,
+  normalizeRole,
+  priceItemKey,
+  revisePurchaseOrder,
+  updatePurchaseOrder,
+  type PurchaseOrderDraft,
+} from "./lib/data";
+import { confirmDialog } from "./lib/dialog";
 import { parseExcelLines } from "./lib/excel";
-import { isoToday, lineNetRaw, money } from "./lib/format";
-import type { PurchaseOrder, PurchaseOrderLineItem, ReferenceData, SupplierPriceItem, StaffMember } from "./types";
+import { isoToday, lineNetRaw, money, moneyRound, shortDate } from "./lib/format";
+import type { PurchaseOrder, PurchaseOrderLineItem, ReferenceData, StaffMember, SupplierPriceItem } from "./types";
 import { VAT_RATES, catLabel, findCategory, initialsFromName, formatProjectSiteContact } from "./shared";
+import { Avatar, Badge } from "./ui";
 
 export const DEFAULT_VEHICLE_REQUIREMENTS = "";
 export const DEFAULT_OFFLOADING_INSTRUCTIONS = "";
@@ -29,18 +40,44 @@ export type PurchaseOrderLineDraft = PurchaseOrderLineItem & {
   expense_type?: string;
 };
 
+const STEP_TITLES = ["Obra e fornecedor", "Artigos", "Entrega", "Rever e validar"];
+const CONTACT_ALL = "__todos__";
+const CONTACT_OTHER = "__outro__";
+
+function emptyLine(sortOrder: number): PurchaseOrderLineDraft {
+  return { sort_order: sortOrder, item_ref: "", description: "", quantity: 1, unit: "un", rate: 0, discount_pct: 0, discount_pct_2: 0, vat_rate: 23, category_id: "", expense_type: "" };
+}
+
+// Nº provisório: o último nº desta obra com o sequencial seguinte (o definitivo vem do trigger ao guardar)
+function provisionalNumber(purchaseOrders: PurchaseOrder[], projectId: string): string | null {
+  const last = purchaseOrders
+    .filter((po) => po.project_id === projectId && /\d+$/.test(po.po_number ?? ""))
+    .sort((a, b) => String(b.created_at ?? b.po_date).localeCompare(String(a.created_at ?? a.po_date)))[0];
+  if (!last) return null;
+  const match = last.po_number.match(/^(.*?)(\d+)$/);
+  if (!match) return null;
+  const next = String(Number(match[2]) + 1).padStart(match[2].length, "0");
+  return `${match[1]}${next}`;
+}
+
 export function POForm({
   currentStaff,
   editingPurchaseOrder,
   references,
+  purchaseOrders,
+  approversFor,
   onSaved,
   onDone,
+  onNewSupplier,
 }: {
   currentStaff: StaffMember | null;
   editingPurchaseOrder: PurchaseOrder | null;
   references: ReferenceData;
-  onSaved: (savedPurchaseOrderId: string, thenValidate?: boolean) => Promise<void>;
+  purchaseOrders: PurchaseOrder[];
+  approversFor: (projectId: string, grandTotal: number) => StaffMember[];
+  onSaved: (savedPurchaseOrderId: string, thenValidate?: boolean, approverId?: string) => Promise<void>;
   onDone: () => void;
+  onNewSupplier: () => void;
 }) {
   const activeSuppliers = references.suppliers.filter((supplier) => supplier.is_active || supplier.id === editingPurchaseOrder?.supplier_id);
   const accessibleProjectIds = new Set(
@@ -63,10 +100,6 @@ export function POForm({
     (category) => category.is_active || editingCategoryIds.has(category.id) || category.id === editingPurchaseOrder?.category_id,
   );
   const categoryById = useMemo(() => new Map(activeCategories.map((category) => [category.id, category])), [activeCategories]);
-  const expenseTypes = useMemo(
-    () => [...new Set(activeCategories.map((category) => category.expense_type).filter(Boolean))].sort(),
-    [activeCategories],
-  );
 
   // Numa adjudicação nova, fornecedor e obra começam vazios (evita escolher o errado sem reparar).
   // A obra só vem pré-preenchida se o utilizador tiver acesso a uma única obra.
@@ -103,8 +136,8 @@ export function POForm({
     include_terms_conditions: editingPurchaseOrder?.include_terms_conditions ?? false,
     notes: editingPurchaseOrder?.notes ?? "",
   });
-  const [lines, setLines] = useState<PurchaseOrderLineDraft[]>([
-    ...(editingPurchaseOrder?.line_items?.length
+  const [lines, setLines] = useState<PurchaseOrderLineDraft[]>(
+    editingPurchaseOrder?.line_items?.length
       ? editingPurchaseOrder.line_items.map((line, index) => ({
           id: line.id,
           sort_order: index + 1,
@@ -114,7 +147,7 @@ export function POForm({
           unit: line.unit,
           rate: Number(line.rate),
           discount_pct: Number(line.discount_pct ?? 0),
-        discount_pct_2: Number(line.discount_pct_2 ?? 0),
+          discount_pct_2: Number(line.discount_pct_2 ?? 0),
           vat_rate: Number(line.vat_rate),
           category_id: line.category_id ?? editingPurchaseOrder.category_id ?? "",
           expense_type:
@@ -122,26 +155,28 @@ export function POForm({
             activeCategories.find((category) => category.id === (line.category_id ?? editingPurchaseOrder.category_id))?.expense_type ??
             "",
         }))
-      : [{ sort_order: 1, item_ref: "", description: "", quantity: 1, unit: "un", rate: 0, discount_pct: 0, discount_pct_2: 0, vat_rate: 23, category_id: "", expense_type: "" }]),
-  ]);
+      : [],
+  );
   const [error, setError] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [showLineErrors, setShowLineErrors] = useState(false);
   const isRevision = editingPurchaseOrder?.status === "validated";
   const [revisionReason, setRevisionReason] = useState("");
-  const [deliveryOpen, setDeliveryOpen] = useState(false);
-  const deliverySummary = [
-    form.delivery_address ? "Morada definida" : "Sem morada",
-    form.site_contact.trim() ? `${form.site_contact.split("\n").filter((l) => l.trim()).length} contacto(s)` : "sem contactos",
-    form.include_driver_leaflet ? "folheto do motorista incluído" : "sem folheto",
-    form.include_terms_conditions ? "com T&C" : "sem T&C",
-  ].join(" · ");
-  const validateAfterSave = useRef(false);
-  const missingCategoryCount = lines.filter((line) => line.description.trim() && !line.category_id).length;
   const canValidateAfterSave = !editingPurchaseOrder || editingPurchaseOrder.status === "draft";
+  // Id do rascunho já gravado (ao avançar nos passos o rascunho é guardado)
+  const savedIdRef = useRef<string | null>(editingPurchaseOrder?.id ?? null);
+  const [savedNumber, setSavedNumber] = useState<string | null>(editingPurchaseOrder?.po_number ?? null);
+
+  const [step, setStep] = useState(editingPurchaseOrder ? 1 : 0);
+  const [visited, setVisited] = useState<Set<number>>(new Set(editingPurchaseOrder ? [0, 1, 2, 3] : [0]));
+  const [supplierSearch, setSupplierSearch] = useState("");
+  const [approverId, setApproverId] = useState("");
 
   const supplier = references.suppliers.find((item) => item.id === supplierId) ?? null;
   const project = references.projects.find((item) => item.id === projectId) ?? null;
+  const cleanLines = lines.filter((line) => line.description.trim());
+  const missingCategoryCount = cleanLines.filter((line) => !line.category_id).length;
   const subtotal = lines.reduce((sum, item) => sum + lineNetRaw(item), 0);
   const vatTotal = lines.reduce((sum, item) => sum + lineNetRaw(item) * (item.vat_rate / 100), 0);
   const grandTotal = subtotal + vatTotal;
@@ -149,20 +184,83 @@ export function POForm({
   const myLimit = currentStaff?.authority_limit ?? null;
   const iAmAdmin = normalizeRole(currentStaff?.role ?? "viewer") === "admin";
   const overLimit = !iAmAdmin && myLimit !== null && grandTotal > myLimit;
+  const needsApproval = overLimit && canValidateAfterSave;
+  const approvers = needsApproval && projectId ? approversFor(projectId, grandTotal) : [];
+
+  // ── Preçário do fornecedor nesta obra ──
+  const [priceItems, setPriceItems] = useState<SupplierPriceItem[]>([]);
+  const [priceLoading, setPriceLoading] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    if (!supplierId || !projectId) {
+      setPriceItems([]);
+      return;
+    }
+    setPriceLoading(true);
+    loadPriceItems(supplierId, projectId)
+      .then((items) => alive && setPriceItems(items))
+      .catch(() => alive && setPriceItems([]))
+      .finally(() => alive && setPriceLoading(false));
+    return () => {
+      alive = false;
+    };
+  }, [supplierId, projectId]);
+  const priceByKey = useMemo(() => new Map(priceItems.map((item) => [priceItemKey(item), item])), [priceItems]);
+
+  // Nº de artigos de preçário por fornecedor nesta obra (lista de fornecedores do passo 1)
+  const [priceCounts, setPriceCounts] = useState<Record<string, number>>({});
+  useEffect(() => {
+    let alive = true;
+    if (!projectId) {
+      setPriceCounts({});
+      return;
+    }
+    loadPriceSupplierCounts(projectId)
+      .then((counts) => alive && setPriceCounts(counts))
+      .catch(() => alive && setPriceCounts({}));
+    return () => {
+      alive = false;
+    };
+  }, [projectId]);
 
   function updateLine(index: number, patch: Partial<PurchaseOrderLineDraft>) {
     setLines((current) => current.map((line, lineIndex) => (lineIndex === index ? { ...line, ...patch } : line)));
   }
 
-  // ── Batch apply: aplicar um campo a várias linhas de uma vez ──
+  function addFromPriceList(item: SupplierPriceItem) {
+    const key = priceItemKey(item);
+    setLines((current) => {
+      const existing = current.findIndex((line) => line.description.trim() && priceItemKey({ item_ref: line.item_ref, description: line.description }) === key);
+      if (existing >= 0) {
+        return current.map((line, index) => (index === existing ? { ...line, quantity: Number(line.quantity) + 1 } : line));
+      }
+      const category = item.category_id ? categoryById.get(item.category_id) : undefined;
+      // substitui uma linha vazia, se houver
+      const blank = current.findIndex((line) => !line.description.trim());
+      const newLine: PurchaseOrderLineDraft = {
+        ...emptyLine(current.length + 1),
+        item_ref: item.item_ref ?? "",
+        description: item.description,
+        unit: item.unit,
+        rate: Number(item.unit_price),
+        category_id: item.category_id ?? "",
+        expense_type: category?.expense_type ?? "",
+      };
+      if (blank >= 0) return current.map((line, index) => (index === blank ? { ...newLine, sort_order: line.sort_order } : line));
+      return [...current, newLine];
+    });
+  }
+  function quantityInLines(item: SupplierPriceItem) {
+    const key = priceItemKey(item);
+    return lines
+      .filter((line) => line.description.trim() && priceItemKey({ item_ref: line.item_ref, description: line.description }) === key)
+      .reduce((sum, line) => sum + Number(line.quantity), 0);
+  }
+
+  // ── Seleção de várias linhas + colar do Excel ──
   const [selectedLines, setSelectedLines] = useState<Set<number>>(new Set());
   const [pasteOpen, setPasteOpen] = useState(false);
   const [pasteText, setPasteText] = useState("");
-  const [catalogOpen, setCatalogOpen] = useState(false);
-  const [catalogItems, setCatalogItems] = useState<SupplierPriceItem[]>([]);
-  const [catalogQtd, setCatalogQtd] = useState<Record<string, string>>({});
-  const [catalogLoading, setCatalogLoading] = useState(false);
-  const [catalogFiltro, setCatalogFiltro] = useState("");
   const [batchField, setBatchField] = useState("vat_rate");
   const [batchValue, setBatchValue] = useState("");
 
@@ -176,66 +274,23 @@ export function POForm({
   function toggleAllLines() {
     setSelectedLines((current) => (current.size === lines.length ? new Set() : new Set(lines.map((_, i) => i))));
   }
-  async function abrirPrecario() {
-    setCatalogOpen(true);
-    setCatalogLoading(true);
-    setCatalogQtd({});
-    setCatalogFiltro("");
-    try {
-      setCatalogItems(await loadPriceItems(supplierId, projectId));
-    } catch {
-      setCatalogItems([]);
-    } finally {
-      setCatalogLoading(false);
-    }
-  }
-
-  function importarDoPrecario() {
-    const escolhidos = catalogItems.filter((i) => Number(catalogQtd[i.id] ?? 0) > 0);
-    if (escolhidos.length === 0) return;
-    setLines((atuais) => [
-      ...atuais,
-      ...escolhidos.map((i, k) => ({
-        sort_order: atuais.length + k + 1,
-        item_ref: i.item_ref ?? "",
-        description: i.description,
-        quantity: Number(catalogQtd[i.id]),
-        unit: i.unit,
-        rate: Number(i.unit_price),
-        discount_pct: 0,
-        discount_pct_2: 0,
-        vat_rate: 23,
-        category_id: i.category_id ?? "",
-        expense_type: "",
-      })),
-    ]);
-    setCatalogOpen(false);
-    setCatalogQtd({});
-  }
-
   function adicionarLinhasColadas() {
     const novas = parseExcelLines(pasteText);
     if (novas.length === 0) return;
     setLines((atuais) => [
-      ...atuais,
+      ...atuais.filter((line) => line.description.trim()),
       ...novas.map((n, i) => ({
-        sort_order: atuais.length + i + 1,
+        ...emptyLine(atuais.length + i + 1),
         item_ref: n.item_ref,
         description: n.description,
         quantity: n.quantity,
         unit: n.unit,
         rate: n.rate,
-        discount_pct: 0,
-        discount_pct_2: 0,
-        vat_rate: 23,
-        category_id: "",
-        expense_type: "",
       })),
     ]);
     setPasteText("");
     setPasteOpen(false);
   }
-
   function applyBatch() {
     if (selectedLines.size === 0) return;
     setLines((current) => current.map((line, index) => {
@@ -252,6 +307,7 @@ export function POForm({
   }
 
   function changeProject(nextProjectId: string) {
+    if (isRevision) return;
     const nextProject = references.projects.find((item) => item.id === nextProjectId);
     setProjectId(nextProjectId);
     setForm((current) => ({
@@ -265,34 +321,21 @@ export function POForm({
     }));
   }
 
-  async function submit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setError(null);
-    if (!supplier || !project) {
-      setError("Selecione fornecedor e obra antes de criar uma adjudicação.");
-      return;
-    }
-    if (!requesterId) {
-      setError("O email com que iniciou sessão tem de corresponder a um registo de equipa para poder criar uma adjudicação.");
-      return;
-    }
-    const cleanLines = lines.filter((line) => line.description.trim());
-    if (!cleanLines.length) {
-      setError("Adicione pelo menos a descrição de uma linha.");
-      return;
-    }
-    if (cleanLines.some((line) => !line.category_id)) {
-      const n = cleanLines.filter((line) => !line.category_id).length;
-      setShowLineErrors(true);
-      setError(`${n} linha(s) sem subcategoria — estão assinaladas a vermelho.`);
-      window.setTimeout(() => {
-        const first = document.querySelector('[data-line-missing="true"]');
-        if (first) window.scrollTo({ top: first.getBoundingClientRect().top + window.scrollY - 140, behavior: "smooth" });
-      }, 0);
-      return;
-    }
+  // ── Validação por passo ──
+  const stepValid = [
+    Boolean(supplier && project),
+    cleanLines.length > 0 && missingCategoryCount === 0,
+    true,
+    true,
+  ];
+  const projectHasDefaults = Boolean(
+    project && (project.site_address || project.default_delivery_address || project.default_site_contacts || project.site_contact_name ||
+      project.default_vehicle_requirements || project.default_delivery_instructions),
+  );
 
-    const draft: PurchaseOrderDraft = {
+  function buildDraft(): PurchaseOrderDraft | null {
+    if (!supplier || !project || !requesterId) return null;
+    return {
       project_id: project.id,
       supplier_id: supplier.id,
       requester_id: requesterId,
@@ -322,21 +365,89 @@ export function POForm({
         sort_order: index + 1,
       })),
     };
+  }
+
+  // Guarda o rascunho sem sair do formulário (ao avançar de passo). Revisões não são gravadas aqui.
+  async function autosaveDraft() {
+    if (isRevision || !stepValid[0] || !stepValid[1]) return;
+    const draft = buildDraft();
+    if (!draft) return;
+    try {
+      if (savedIdRef.current) {
+        await updatePurchaseOrder(savedIdRef.current, draft);
+      } else {
+        savedIdRef.current = await createPurchaseOrder(draft);
+      }
+      setInfo("Rascunho guardado.");
+    } catch {
+      // gravação automática falhou: não bloqueia; o botão final volta a tentar e mostra o erro
+    }
+  }
+
+  function goToStep(target: number) {
+    if (target === step) return;
+    // passos seguintes só se os anteriores estiverem completos
+    for (let i = 0; i < target; i += 1) {
+      if (!stepValid[i]) {
+        if (i === 1) setShowLineErrors(true);
+        setError(i === 0 ? "Escolha a obra e o fornecedor." : missingCategoryCount ? `${missingCategoryCount} linha(s) sem rubrica — estão assinaladas a vermelho.` : "Junte pelo menos um artigo.");
+        setStep(i);
+        return;
+      }
+    }
+    setError(null);
+    if (target > step && step >= 1) void autosaveDraft();
+    setStep(target);
+    setVisited((current) => new Set([...current, target]));
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  async function save(mode: "draft" | "validate" | "approval") {
+    setError(null);
+    setInfo(null);
+    if (!supplier || !project) {
+      setError("Selecione fornecedor e obra antes de guardar.");
+      setStep(0);
+      return;
+    }
+    if (!requesterId) {
+      setError("O email com que iniciou sessão tem de corresponder a um registo de equipa para poder criar uma adjudicação.");
+      return;
+    }
+    if (!cleanLines.length) {
+      setError("Adicione pelo menos um artigo.");
+      setStep(1);
+      return;
+    }
+    if (missingCategoryCount > 0) {
+      setShowLineErrors(true);
+      setError(`${missingCategoryCount} linha(s) sem rubrica — estão assinaladas a vermelho.`);
+      setStep(1);
+      return;
+    }
+    if (mode === "approval" && !approverId) {
+      setError("Escolha quem aprova.");
+      return;
+    }
+    const draft = buildDraft();
+    if (!draft) return;
 
     try {
       setBusy(true);
-      let savedPurchaseOrderId = editingPurchaseOrder?.id;
-      if (editingPurchaseOrder) {
-        if (isRevision) {
-          // adjudicação validada: nova revisão (a versão atual fica no histórico)
-          await revisePurchaseOrder(editingPurchaseOrder.id, draft, revisionReason);
-        } else {
-          await updatePurchaseOrder(editingPurchaseOrder.id, draft);
-        }
+      let savedPurchaseOrderId = savedIdRef.current;
+      if (editingPurchaseOrder && isRevision) {
+        // adjudicação validada: nova revisão (a versão atual fica no histórico)
+        await revisePurchaseOrder(editingPurchaseOrder.id, draft, revisionReason);
+        savedPurchaseOrderId = editingPurchaseOrder.id;
+      } else if (savedPurchaseOrderId) {
+        await updatePurchaseOrder(savedPurchaseOrderId, draft);
       } else {
         savedPurchaseOrderId = await createPurchaseOrder(draft);
+        savedIdRef.current = savedPurchaseOrderId;
       }
-      if (savedPurchaseOrderId) await onSaved(savedPurchaseOrderId, validateAfterSave.current && canValidateAfterSave);
+      if (savedPurchaseOrderId) {
+        await onSaved(savedPurchaseOrderId, mode === "validate" && canValidateAfterSave, mode === "approval" ? approverId : undefined);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Não foi possível guardar a adjudicação.");
     } finally {
@@ -344,15 +455,83 @@ export function POForm({
     }
   }
 
+  async function cancel() {
+    if ((cleanLines.length || supplierId) && !editingPurchaseOrder && !savedIdRef.current) {
+      const ok = await confirmDialog("Sair sem guardar? O que preencheu nesta adjudicação perde-se.");
+      if (!ok) return;
+    }
+    onDone();
+  }
+
+  async function newSupplier() {
+    const ok = await confirmDialog("Abrir Fornecedores para criar um novo? Esta adjudicação ainda não foi guardada e perde-se.");
+    if (ok) onNewSupplier();
+  }
+
+  function onSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (step < 3) goToStep(step + 1);
+  }
+
+  // ── Textos dinâmicos do stepper ──
+  const stepSubs = [
+    project && supplier ? `${project.project_name} · ${supplier.supplier_name}` : project ? `${project.project_name} · escolher fornecedor` : "Escolher obra e fornecedor",
+    cleanLines.length ? `${cleanLines.length} ${cleanLines.length === 1 ? "artigo" : "artigos"} · ${moneyRound(subtotal)}` : "Juntar artigos",
+    form.delivery_date ? `Entrega ${shortDate(form.delivery_date)}` : "Data, morada e contacto",
+    isRevision ? "Guardar nova revisão" : needsApproval ? "Vai para aprovação" : "Pronta a validar",
+  ];
+
+  // Contactos na obra predefinidos (um por linha)
+  const siteContactOptions = (project?.default_site_contacts || formatProjectSiteContact(project) || "")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const contactSelectValue =
+    form.site_contact.trim() === "" ? "" :
+    siteContactOptions.includes(form.site_contact.trim()) ? form.site_contact.trim() :
+    siteContactOptions.length > 1 && form.site_contact.trim() === siteContactOptions.join("\n") ? CONTACT_ALL :
+    CONTACT_OTHER;
+  const [contactCustom, setContactCustom] = useState(false);
+  const showContactText = contactCustom || contactSelectValue === CONTACT_OTHER;
+
+  const filteredSuppliers = activeSuppliers
+    .filter((item) => {
+      const q = supplierSearch.trim().toLowerCase();
+      if (!q) return true;
+      return `${item.supplier_name} ${item.activity ?? ""} ${item.account_code ?? ""}`.toLowerCase().includes(q);
+    })
+    .sort((a, b) => (priceCounts[b.id] ?? 0) - (priceCounts[a.id] ?? 0) || a.supplier_name.localeCompare(b.supplier_name, "pt"));
+
+  const provisional = savedNumber ?? (projectId ? provisionalNumber(purchaseOrders, projectId) : null);
+  const limitPct = myLimit && myLimit > 0 ? Math.min(1, grandTotal / myLimit) : 0;
+
+  useEffect(() => {
+    if (editingPurchaseOrder?.po_number) setSavedNumber(editingPurchaseOrder.po_number);
+  }, [editingPurchaseOrder?.po_number]);
+
   return (
-    <section className="work-section po-form-section">
-      <form onSubmit={submit}>
+    <div className="po-wizard">
+      <form className="po-wizard-main" onSubmit={onSubmit} noValidate>
+        <ol className="stepper" aria-label="Passos">
+          {STEP_TITLES.map((title, index) => {
+            const done = index !== step && visited.has(index) && stepValid[index] && (index < step || visited.has(index + 1));
+            const state = index === step ? "current" : done ? "done" : "todo";
+            return (
+              <li key={title}>
+                <button type="button" className={`step ${state}`} onClick={() => goToStep(index)} aria-current={index === step ? "step" : undefined}>
+                  <span className="step-num">{done ? <Check size={14} /> : index + 1}</span>
+                  <span className="step-text">
+                    <span className="step-title">{title}</span>
+                    <span className="step-sub">{stepSubs[index]}</span>
+                  </span>
+                </button>
+              </li>
+            );
+          })}
+        </ol>
+
         {error && <div className="notice error">{error}</div>}
-        {editingPurchaseOrder && !isRevision && (
-          <div className="notice">
-            A editar o rascunho <strong>{editingPurchaseOrder.po_number}</strong>. Ao guardar, o rascunho é atualizado.
-          </div>
-        )}
+        {info && !error && <div className="notice">{info}</div>}
         {editingPurchaseOrder && isRevision && (
           <div className="notice">
             <p style={{ margin: "0 0 8px" }}>
@@ -367,485 +546,566 @@ export function POForm({
             </label>
           </div>
         )}
-        <div className="po-block">
-        <h3 className="po-block-title"><span className="po-step">1</span>Fornecedor e obra</h3>
-        <div className="form-grid">
-          <label>
-            Fornecedor
-            <select value={supplierId} onChange={(event) => setSupplierId(event.target.value)} required disabled={isRevision}>
-              <option value="">Selecionar fornecedor</option>
-              {activeSuppliers.map((item) => (
-                <option value={item.id} key={item.id}>
-                  {item.supplier_name}
-                </option>
-              ))}
-            </select>
-            {supplier && (
-              <small className="field-hint">
-                {[supplier.contact_name, supplier.email, supplier.phone].filter(Boolean).join(" · ") || "Sem contactos na ficha do fornecedor"}
-              </small>
-            )}
-          </label>
-          <label>
-            Obra
-            <select value={projectId} onChange={(event) => changeProject(event.target.value)} required disabled={isRevision}>
-              <option value="">Selecionar obra</option>
-              {activeProjects.map((item) => (
-                <option value={item.id} key={item.id}>
-                  {item.project_name}
-                </option>
-              ))}
-            </select>
-            {project && (project.cost_centre_code || project.invoice_project_code) && (
-              <small className="field-hint">
-                {[
-                  project.cost_centre_code ? `Centro de custo ${project.cost_centre_code}` : "",
-                  project.invoice_project_code ? `código fatura ${project.invoice_project_code}` : "",
-                ].filter(Boolean).join(" · ")}
-              </small>
-            )}
-          </label>
-          <label>
-            Requisitante
-            <div className="readonly-field">
-              <strong>{requesterName}</strong>
-              <span>{requesterInitials || "Faltam iniciais"}</span>
-            </div>
-          </label>
-          <label>
-            Data da adjudicação
-            <input type="date" value={form.po_date} onChange={(event) => setForm({ ...form, po_date: event.target.value })} />
-          </label>
-          <label>
-            Condições de pagamento
-            <select
-              value={PAYMENT_TERMS_OPTIONS.includes(form.payment_terms) ? form.payment_terms : "__outro__"}
-              onChange={(event) => setForm({ ...form, payment_terms: event.target.value === "__outro__" ? "" : event.target.value })}
-            >
-              {PAYMENT_TERMS_OPTIONS.map((option) => (
-                <option value={option} key={option}>{option}</option>
-              ))}
-              <option value="__outro__">Outro (especificar)</option>
-            </select>
-            {!PAYMENT_TERMS_OPTIONS.includes(form.payment_terms) && (
-              <input
-                placeholder="Especificar condições"
-                value={form.payment_terms}
-                onChange={(event) => setForm({ ...form, payment_terms: event.target.value })}
-                style={{ marginTop: "6px" }}
-              />
-            )}
-          </label>
-          <label>
-            Código de obra na fatura
-            <input
-              placeholder="ex: 24-26256"
-              value={form.invoice_project_code}
-              onChange={(event) => setForm({ ...form, invoice_project_code: event.target.value })}
-            />
-          </label>
-          <label>
-            Data de entrega
-            <input type="date" value={form.delivery_date} onChange={(event) => setForm({ ...form, delivery_date: event.target.value })} />
-          </label>
-          <label>
-            Hora de entrega
-            <select value={form.delivery_time} onChange={(event) => setForm({ ...form, delivery_time: event.target.value })}>
-              <option value="">Selecionar hora</option>
-              {DELIVERY_TIME_OPTIONS.filter(Boolean).map((option) => (
-                <option value={option} key={option}>
-                  {option}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="wide">
-            Morada de entrega / obra
-            <textarea value={form.delivery_address} onChange={(event) => setForm({ ...form, delivery_address: event.target.value })} />
-          </label>
-        </div>
-        </div>
 
-        <div className="line-editor po-block">
-          <div className="section-heading compact-heading">
-            <h2 className="po-block-title">
-              <span className="po-step">2</span>Linhas{" "}
-              <small className="muted" style={{ fontWeight: 400 }}>{lines.filter((l) => l.description.trim()).length} artigo(s)</small>
-            </h2>
-            <div className="linhas-acoes">
-              <button type="button" className="secondary" onClick={abrirPrecario} disabled={!supplierId || !projectId}>
-                <Tags size={16} />
-                Importar do preçário
-              </button>
-              <button type="button" className="secondary" onClick={() => setPasteOpen(true)}>
-                <ClipboardPaste size={16} />
-                Colar do Excel
-              </button>
-              <button type="button" onClick={() => setLines([...lines, { sort_order: lines.length + 1, item_ref: "", description: "", quantity: 1, unit: "un", rate: 0, discount_pct: 0, discount_pct_2: 0, vat_rate: 23, category_id: "", expense_type: "" }])}>
-                <Plus size={16} />
-                Adicionar linha
-              </button>
-            </div>
-          </div>
-          {catalogOpen && (
-            <div className="modal-overlay" onClick={() => setCatalogOpen(false)}>
-              <div className="modal-card paste-modal" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
-                <h3>Importar do preçário</h3>
-                <p className="muted">
-                  Preçário deste fornecedor para esta obra. Indique a quantidade dos artigos que quer adicionar
-                  — só entram os que tiverem quantidade.
-                </p>
-                {catalogLoading ? (
-                  <p className="muted">A carregar…</p>
-                ) : catalogItems.length === 0 ? (
-                  <p className="notice">
-                    Ainda não há preçário para este fornecedor nesta obra. Crie-o no separador <strong>Preçários</strong>.
-                  </p>
-                ) : (
-                  <>
-                    <input
-                      className="catalogo-filtro"
-                      value={catalogFiltro}
-                      onChange={(e) => setCatalogFiltro(e.target.value)}
-                      placeholder="Procurar artigo…"
-                    />
-                    <div className="table-wrap paste-preview">
-                      <table className="recon-table">
-                        <thead>
-                          <tr>
-                            <th>Ref.</th>
-                            <th>Descrição</th>
-                            <th>Un.</th>
-                            <th className="num">Preço</th>
-                            <th className="num">Quantidade</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {catalogItems
-                            .filter((i) =>
-                              catalogFiltro.trim() === "" ||
-                              i.description.toLowerCase().includes(catalogFiltro.toLowerCase()) ||
-                              (i.item_ref ?? "").toLowerCase().includes(catalogFiltro.toLowerCase()))
-                            .map((i) => (
-                              <tr key={i.id} className={Number(catalogQtd[i.id] ?? 0) > 0 ? "line-row-selected" : ""}>
-                                <td>{i.item_ref || "—"}</td>
-                                <td>{i.description}</td>
-                                <td>{i.unit}</td>
-                                <td className="num">{money(Number(i.unit_price))}</td>
-                                <td className="num">
-                                  <input
-                                    className="preco-input"
-                                    type="number"
-                                    min="0"
-                                    step="any"
-                                    value={catalogQtd[i.id] ?? ""}
-                                    onChange={(e) => setCatalogQtd({ ...catalogQtd, [i.id]: e.target.value })}
-                                    placeholder="0"
-                                  />
-                                </td>
-                              </tr>
-                            ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </>
-                )}
-                <div className="modal-actions">
-                  <button type="button" className="secondary" onClick={() => setCatalogOpen(false)}>Cancelar</button>
-                  <button
-                    type="button"
-                    onClick={importarDoPrecario}
-                    disabled={catalogItems.filter((i) => Number(catalogQtd[i.id] ?? 0) > 0).length === 0}
-                  >
-                    Adicionar {catalogItems.filter((i) => Number(catalogQtd[i.id] ?? 0) > 0).length || ""} artigo(s)
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-          {pasteOpen && (
-            <div className="modal-overlay" onClick={() => setPasteOpen(false)}>
-              <div className="modal-card paste-modal" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
-                <h3>Colar linhas do Excel</h3>
-                <p className="muted">
-                  No Excel, selecione as células e copie (Ctrl+C). Cole aqui com Ctrl+V.
-                  A ordem das colunas deve ser: <strong>Ref. | Descrição | Qtd | Unidade | Preço</strong>.
-                </p>
-                <textarea
-                  rows={8}
-                  value={pasteText}
-                  onChange={(e) => setPasteText(e.target.value)}
-                  placeholder={"Cole aqui...\n\nExemplo:\nART-01\tBetão C30/37\t450\tm3\t82,50 €"}
-                />
-                {pasteText.trim() !== "" && (() => {
-                  const previstas = parseExcelLines(pasteText);
-                  if (previstas.length === 0) {
-                    return <p className="notice error">Não foi possível ler nenhuma linha. Confirme que copiou do Excel (as colunas devem vir separadas por tabulação).</p>;
-                  }
-                  const semPreco = previstas.filter((l) => l.rate === 0).length;
-                  return (
-                    <>
-                      <p className="paste-resumo">
-                        <strong>{previstas.length}</strong> linha(s) reconhecida(s)
-                        {semPreco > 0 && <span className="paste-aviso"> · {semPreco} sem preço (ficam a 0)</span>}
-                      </p>
-                      <div className="table-wrap paste-preview">
-                        <table className="recon-table">
-                          <thead>
-                            <tr><th>Ref.</th><th>Descrição</th><th className="num">Qtd</th><th>Un.</th><th className="num">Preço</th><th className="num">Total</th></tr>
-                          </thead>
-                          <tbody>
-                            {previstas.slice(0, 50).map((l, i) => (
-                              <tr key={i}>
-                                <td>{l.item_ref || "—"}</td>
-                                <td>{l.description}</td>
-                                <td className="num">{l.quantity}</td>
-                                <td>{l.unit}</td>
-                                <td className="num">{money(l.rate)}</td>
-                                <td className="num">{money(l.quantity * l.rate)}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                        {previstas.length > 50 && <p className="muted">…e mais {previstas.length - 50} linha(s).</p>}
-                      </div>
-                    </>
-                  );
-                })()}
-                <div className="modal-actions">
-                  <button type="button" className="secondary" onClick={() => { setPasteOpen(false); setPasteText(""); }}>Cancelar</button>
-                  <button type="button" onClick={adicionarLinhasColadas} disabled={parseExcelLines(pasteText).length === 0}>
-                    Adicionar {parseExcelLines(pasteText).length || ""} linha(s)
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-          {selectedLines.size > 0 && (
-            <div className="batch-apply">
-              <span className="batch-count">{selectedLines.size} linha(s) selecionada(s)</span>
-              <span>Aplicar</span>
-              <select value={batchField} onChange={(event) => { setBatchField(event.target.value); setBatchValue(""); }}>
-                <option value="vat_rate">IVA</option>
-                <option value="discount_pct">Desc. 1 %</option>
-                <option value="discount_pct_2">Desc. 2 %</option>
-                <option value="category">Categoria / Subcategoria</option>
-              </select>
-              {batchField === "vat_rate" ? (
-                <select value={batchValue} onChange={(event) => setBatchValue(event.target.value)}>
-                  <option value="">—</option>
-                  {VAT_RATES.map((rate) => (<option value={rate} key={rate}>{rate === 0 ? "Isento" : `${rate}%`}</option>))}
-                </select>
-              ) : batchField === "category" ? (
-                <input list="subcategorias-list" placeholder="Procurar subcategoria…" value={batchValue} onChange={(event) => setBatchValue(event.target.value)} />
+        {step === 0 && (
+          <section className="card wizard-card">
+            <div className="wizard-block">
+              <h3 className="wizard-label">Obra</h3>
+              {activeProjects.length === 0 ? (
+                <p className="notice">Não tem obras atribuídas. Peça acesso a um administrador.</p>
               ) : (
-                <input type="number" min="0" max="100" step="0.5" placeholder="%" value={batchValue} onChange={(event) => setBatchValue(event.target.value)} />
-              )}
-              <button type="button" onClick={applyBatch} disabled={batchValue === ""}>Aplicar às selecionadas</button>
-              <button type="button" className="secondary" onClick={() => setSelectedLines(new Set())}>Limpar seleção</button>
-            </div>
-          )}
-          <datalist id="subcategorias-list">
-            {[...activeCategories]
-              .sort((x, y) => catLabel(x).localeCompare(catLabel(y), "pt", { numeric: true }))
-              .map((cat) => (
-                <option value={catLabel(cat)} key={cat.id} />
-              ))}
-          </datalist>
-          <div className="line-header" aria-hidden="true">
-            <span><input type="checkbox" checked={lines.length > 0 && selectedLines.size === lines.length} onChange={toggleAllLines} title="Selecionar todas" /></span>
-            <span>Ref. artigo</span>
-            <span>Descrição</span>
-            <span>Subcategoria</span>
-            <span>Nº de unidades</span>
-            <span>Unidade</span>
-            <span>Preço unitário</span>
-            <span>Desc. 1 %</span>
-            <span>Desc. 2 %</span>
-            <span>IVA</span>
-            <span>Total</span>
-            <span />
-          </div>
-          {lines.map((line, index) => {
-            const selectedCategory = categoryById.get(line.category_id ?? "");
-            const selectedExpenseType = line.expense_type || selectedCategory?.expense_type || "";
-            const missing = showLineErrors && line.description.trim() !== "" && !line.category_id;
-
-            return (
-              <div
-                className={selectedLines.has(index) ? "line-row line-row-selected" : "line-row"}
-                key={index}
-                data-line-missing={missing ? "true" : undefined}
-                style={missing ? { background: "#fdecee", borderRadius: 8, boxShadow: "0 0 0 1px #e9a3ab" } : undefined}
-              >
-                <input type="checkbox" className="line-select" checked={selectedLines.has(index)} onChange={() => toggleLineSelected(index)} />
-                <input placeholder="Ref. artigo" value={line.item_ref ?? ""} onChange={(event) => updateLine(index, { item_ref: event.target.value })} />
-                <input placeholder="Descrição" value={line.description} onChange={(event) => updateLine(index, { description: event.target.value })} />
-                <div style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
-                <input
-                  list="subcategorias-list"
-                  placeholder={missing ? "Obrigatório — escolher…" : "Procurar subcategoria…"}
-                  style={missing ? { borderColor: "#c41d2d", color: "#c41d2d" } : undefined}
-                  aria-invalid={missing || undefined}
-                  defaultValue={selectedCategory ? catLabel(selectedCategory) : ""}
-                  key={`sub-${index}-${line.category_id ?? "none"}`}
-                  onInput={(event) => {
-                    const typed = (event.target as HTMLInputElement).value;
-                    const chosen = findCategory(activeCategories, typed);
-                    if (chosen) {
-                      updateLine(index, { category_id: chosen.id, expense_type: chosen.expense_type ?? "" });
-                    } else if (line.category_id) {
-                      // limpou/alterou o texto depois de ter escolhido — desassocia a categoria
-                      updateLine(index, { category_id: "" });
-                    }
-                  }}
-                />
-                {selectedExpenseType && <small className="muted" style={{ fontSize: "0.72rem" }}>{selectedExpenseType}</small>}
+                <div className="radio-cards" role="radiogroup" aria-label="Obra">
+                  {activeProjects.map((item) => (
+                    <button
+                      type="button"
+                      role="radio"
+                      aria-checked={projectId === item.id}
+                      key={item.id}
+                      className={projectId === item.id ? "radio-card selected" : "radio-card"}
+                      onClick={() => changeProject(item.id)}
+                      disabled={isRevision && item.id !== projectId}
+                    >
+                      <span className="rc-code">{item.project_code}</span>
+                      <span className="rc-name">{item.project_name}</span>
+                      <span className="rc-meta">
+                        {[item.cost_centre_code ? `CC ${item.cost_centre_code}` : "", item.invoice_project_code ? `fatura ${item.invoice_project_code}` : ""].filter(Boolean).join(" · ") || "—"}
+                      </span>
+                    </button>
+                  ))}
                 </div>
-                <input type="number" step="any" inputMode="decimal" title="Use valor negativo (ex.: -5) para devoluções/trocas" className={line.quantity < 0 ? "qty-negative" : undefined} value={line.quantity} onChange={(event) => updateLine(index, { quantity: Number(event.target.value) })} />
-                <input value={line.unit} onChange={(event) => updateLine(index, { unit: event.target.value })} />
-                <input type="number" min="0" step="any" inputMode="decimal" value={line.rate} onChange={(event) => updateLine(index, { rate: Number(event.target.value) })} />
-                <input type="number" min="0" max="100" step="any" inputMode="decimal" value={line.discount_pct ?? 0} onChange={(event) => updateLine(index, { discount_pct: Number(event.target.value) })} />
-                <input type="number" min="0" max="100" step="any" inputMode="decimal" value={line.discount_pct_2 ?? 0} onChange={(event) => updateLine(index, { discount_pct_2: Number(event.target.value) })} />
-                <select value={line.vat_rate} onChange={(event) => updateLine(index, { vat_rate: Number(event.target.value) })}>
-                  <option value={23}>IVA 23%</option>
-                  <option value={13}>IVA 13%</option>
-                  <option value={6}>IVA 6%</option>
-                  <option value={0}>Isento</option>
-                </select>
-                <strong>{money(lineNetRaw(line))}</strong>
-                <button type="button" className="icon-button danger" onClick={() => setLines(lines.filter((_, lineIndex) => lineIndex !== index))} title="Remover linha">
-                  <Trash2 size={16} />
-                </button>
+              )}
+            </div>
+            <div className="wizard-block">
+              <div className="wizard-label-row">
+                <h3 className="wizard-label">Fornecedor</h3>
+                {!isRevision && (
+                  <button type="button" className="link-button" onClick={() => void newSupplier()}>
+                    <Plus size={14} /> Novo fornecedor
+                  </button>
+                )}
               </div>
-            );
-          })}
-        </div>
-
-        <div className="po-block">
-        <div className="po-block-head">
-          <h3 className="po-block-title"><span className="po-step">3</span>Entrega e documento</h3>
-          {!deliveryOpen && <span className="muted po-block-summary">{deliverySummary}</span>}
-          <button type="button" className="link-button" onClick={() => setDeliveryOpen((open) => !open)} aria-expanded={deliveryOpen}>
-            {deliveryOpen ? "Fechar ▴" : "Editar ▾"}
-          </button>
-        </div>
-        {deliveryOpen && (
-        <div className="form-grid">
-          <div className="wide attachment-options">
-            <label className="tick-box">
-              <input
-                checked={form.include_driver_leaflet}
-                type="checkbox"
-                onChange={(event) => setForm({ ...form, include_driver_leaflet: event.target.checked })}
-              />
-              <span>
-                <strong>Folheto do motorista</strong>
-                <small>Incluir o folheto do motorista após a adjudicação.</small>
-              </span>
-            </label>
-            <label className="tick-box">
-              <input
-                checked={form.include_terms_conditions}
-                type="checkbox"
-                onChange={(event) => setForm({ ...form, include_terms_conditions: event.target.checked })}
-              />
-              <span>
-                <strong>Termos e Condições</strong>
-                <small>Incluir condições Legendre após o folheto do motorista.</small>
-              </span>
-            </label>
-          </div>
-          <label className="wide">
-            Contactos na obra <small>(um por linha)</small>
-            <textarea rows={3} value={form.site_contact} onChange={(event) => setForm({ ...form, site_contact: event.target.value })} placeholder="Ex:\nJoão Silva (encarregado) - 937 128 143\nTiago Tremoço - 937 987 266" />
-          </label>
-          <label>
-            Requisitos de veículo
-            <input value={form.vehicle_requirements} onChange={(event) => setForm({ ...form, vehicle_requirements: event.target.value })} />
-          </label>
-          <label className="wide">
-            Descarga
-            <textarea value={form.offloading_instructions} onChange={(event) => setForm({ ...form, offloading_instructions: event.target.value })} />
-          </label>
-          <label className="wide">
-            Instruções de entrega
-            <textarea value={form.delivery_instructions} onChange={(event) => setForm({ ...form, delivery_instructions: event.target.value })} />
-          </label>
-          <label className="wide">
-            Notas
-            <textarea value={form.notes} onChange={(event) => setForm({ ...form, notes: event.target.value })} />
-          </label>
-        </div>
+              <label className="search-field">
+                <Search size={16} aria-hidden="true" />
+                <input
+                  type="search"
+                  placeholder="Procurar por nome, atividade ou conta…"
+                  value={supplierSearch}
+                  onChange={(event) => setSupplierSearch(event.target.value)}
+                  aria-label="Procurar fornecedor"
+                  disabled={isRevision}
+                />
+              </label>
+              <ul className="pick-list" role="listbox" aria-label="Fornecedores">
+                {filteredSuppliers.slice(0, 60).map((item) => {
+                  const count = priceCounts[item.id] ?? 0;
+                  return (
+                    <li key={item.id}>
+                      <button
+                        type="button"
+                        role="option"
+                        aria-selected={supplierId === item.id}
+                        className={supplierId === item.id ? "pick selected" : "pick"}
+                        onClick={() => !isRevision && setSupplierId(item.id)}
+                        disabled={isRevision && item.id !== supplierId}
+                      >
+                        <span className="pick-main">
+                          <strong>{item.supplier_name}</strong>
+                          <small>{[item.activity, item.account_code ? `conta ${item.account_code}` : ""].filter(Boolean).join(" · ") || "—"}</small>
+                        </span>
+                        {projectId && count > 0 && <span className="pick-aside">Preçário: {count} {count === 1 ? "artigo" : "artigos"}</span>}
+                      </button>
+                    </li>
+                  );
+                })}
+                {filteredSuppliers.length === 0 && <li className="muted pick-empty">Nenhum fornecedor corresponde à pesquisa.</li>}
+              </ul>
+              {filteredSuppliers.length > 60 && <p className="muted field-hint">A mostrar 60 de {filteredSuppliers.length}. Refine a pesquisa.</p>}
+              {supplier && (
+                <p className="field-hint">
+                  {[supplier.contact_name, supplier.email, supplier.phone].filter(Boolean).join(" · ") || "Sem contactos na ficha do fornecedor"}
+                </p>
+              )}
+            </div>
+          </section>
         )}
-        </div>
 
-        <div
-          style={{
-            position: "sticky",
-            bottom: 0,
-            zIndex: 5,
-            background: "#fff",
-            borderTop: "1px solid var(--line, #e4e6eb)",
-            boxShadow: "0 -6px 20px rgba(20, 58, 103, 0.06)",
-            padding: "10px 0",
-            marginTop: 12,
-          }}
-        >
-        <div className="totals-strip">
-          <span>Líquido {money(subtotal)}</span>
-          <span>IVA {money(vatTotal)}</span>
-          <strong>Total c/ IVA {money(grandTotal)}</strong>
-        </div>
-        {overLimit && myLimit !== null && (
-          <div className="notice">
-            Acima do seu limite de autoridade ({money(myLimit)} c/ IVA). Ao validar, a adjudicação é submetida para aprovação.
-          </div>
+        {step === 1 && (
+          <>
+            <section className="card wizard-card">
+              <div className="wizard-label-row">
+                <h3 className="wizard-label">Artigos</h3>
+                <div className="linhas-acoes">
+                  <button type="button" className="outline sm" onClick={() => setPasteOpen(true)}>
+                    <ClipboardPaste size={16} /> Colar do Excel
+                  </button>
+                  <button type="button" className="outline sm" onClick={() => setLines([...lines, emptyLine(lines.length + 1)])}>
+                    <Plus size={16} /> Linha livre
+                  </button>
+                </div>
+              </div>
+              {selectedLines.size > 0 && (
+                <div className="batch-apply">
+                  <span className="batch-count">{selectedLines.size} linha(s) selecionada(s)</span>
+                  <span>Aplicar</span>
+                  <select value={batchField} onChange={(event) => { setBatchField(event.target.value); setBatchValue(""); }}>
+                    <option value="vat_rate">IVA</option>
+                    <option value="discount_pct">Desc. 1 %</option>
+                    <option value="discount_pct_2">Desc. 2 %</option>
+                    <option value="category">Rubrica</option>
+                  </select>
+                  {batchField === "vat_rate" ? (
+                    <select value={batchValue} onChange={(event) => setBatchValue(event.target.value)}>
+                      <option value="">—</option>
+                      {VAT_RATES.map((rate) => (<option value={rate} key={rate}>{rate === 0 ? "Isento" : `${rate}%`}</option>))}
+                    </select>
+                  ) : batchField === "category" ? (
+                    <input list="subcategorias-list" placeholder="Procurar rubrica…" value={batchValue} onChange={(event) => setBatchValue(event.target.value)} />
+                  ) : (
+                    <input type="number" min="0" max="100" step="0.5" placeholder="%" value={batchValue} onChange={(event) => setBatchValue(event.target.value)} />
+                  )}
+                  <button type="button" className="sm" onClick={applyBatch} disabled={batchValue === ""}>Aplicar às selecionadas</button>
+                  <button type="button" className="ghost sm" onClick={() => setSelectedLines(new Set())}>Limpar seleção</button>
+                </div>
+              )}
+              <datalist id="subcategorias-list">
+                {[...activeCategories]
+                  .sort((x, y) => catLabel(x).localeCompare(catLabel(y), "pt", { numeric: true }))
+                  .map((cat) => (
+                    <option value={catLabel(cat)} key={cat.id} />
+                  ))}
+              </datalist>
+              {lines.length === 0 ? (
+                <div className="empty-lines">
+                  <p>Ainda sem artigos.</p>
+                  <p className="muted">Junte artigos do preçário abaixo, cole do Excel ou acrescente uma linha livre.</p>
+                </div>
+              ) : (
+                <div className="table-wrap flush">
+                  <table className="lines-table">
+                    <thead>
+                      <tr>
+                        <th className="col-check"><input type="checkbox" checked={lines.length > 0 && selectedLines.size === lines.length} onChange={toggleAllLines} aria-label="Selecionar todas" /></th>
+                        <th>Artigo · rubrica</th>
+                        <th className="num">Qtd</th>
+                        <th className="num">Preço</th>
+                        <th className="num">Líquido</th>
+                        <th aria-label="Remover" />
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {lines.map((line, index) => {
+                        const selectedCategory = categoryById.get(line.category_id ?? "");
+                        const missing = showLineErrors && line.description.trim() !== "" && !line.category_id;
+                        const fromList = line.description.trim() ? priceByKey.get(priceItemKey({ item_ref: line.item_ref, description: line.description })) : undefined;
+                        return (
+                          <tr key={index} className={missing ? "line-missing" : selectedLines.has(index) ? "line-row-selected" : undefined} data-line-missing={missing ? "true" : undefined}>
+                            <td className="col-check"><input type="checkbox" checked={selectedLines.has(index)} onChange={() => toggleLineSelected(index)} aria-label={`Selecionar linha ${index + 1}`} /></td>
+                            <td className="col-artigo">
+                              <input placeholder="Descrição do artigo" value={line.description} onChange={(event) => updateLine(index, { description: event.target.value })} aria-label="Descrição" />
+                              <div className="rubrica-field">
+                              <input
+                                list="subcategorias-list"
+                                placeholder={missing ? "Obrigatório — escolher…" : "Procurar rubrica…"}
+                                aria-invalid={missing || undefined}
+                                aria-label="Rubrica"
+                                defaultValue={selectedCategory ? catLabel(selectedCategory) : ""}
+                                key={`sub-${index}-${line.category_id ?? "none"}`}
+                                onInput={(event) => {
+                                  const typed = (event.target as HTMLInputElement).value;
+                                  const chosen = findCategory(activeCategories, typed);
+                                  if (chosen) {
+                                    updateLine(index, { category_id: chosen.id, expense_type: chosen.expense_type ?? "" });
+                                  } else if (line.category_id) {
+                                    updateLine(index, { category_id: "" });
+                                  }
+                                }}
+                              />
+                              {selectedCategory?.expense_type && <small className="muted">{selectedCategory.expense_type}</small>}
+                              </div>
+                              <div className="artigo-sub">
+                                <input className="ref-input" placeholder="Ref." value={line.item_ref ?? ""} onChange={(event) => updateLine(index, { item_ref: event.target.value })} aria-label="Ref. do artigo" />
+                                <span className="mini-field" title="Descontos">
+                                  Desc.
+                                  <input type="number" min="0" max="100" step="any" inputMode="decimal" value={line.discount_pct ?? 0} onChange={(event) => updateLine(index, { discount_pct: Number(event.target.value) })} aria-label="Desconto 1 %" />
+                                  +
+                                  <input type="number" min="0" max="100" step="any" inputMode="decimal" value={line.discount_pct_2 ?? 0} onChange={(event) => updateLine(index, { discount_pct_2: Number(event.target.value) })} aria-label="Desconto 2 %" />
+                                  %
+                                </span>
+                                <select className="vat-select" value={line.vat_rate} onChange={(event) => updateLine(index, { vat_rate: Number(event.target.value) })} aria-label="IVA">
+                                  {VAT_RATES.map((rate) => (<option value={rate} key={rate}>{rate === 0 ? "Isento" : `IVA ${rate}%`}</option>))}
+                                </select>
+                              </div>
+                              {fromList && <small className="muted price-hint">Preço do preçário {money(Number(fromList.unit_price))} · {fromList.unit}</small>}
+                            </td>
+                            <td className="num col-qty">
+                              <input type="number" step="any" inputMode="decimal" title="Use valor negativo (ex.: -5) para devoluções/trocas" className={line.quantity < 0 ? "qty-negative" : undefined} value={line.quantity} onChange={(event) => updateLine(index, { quantity: Number(event.target.value) })} aria-label="Quantidade" />
+                              <input className="unit-input" value={line.unit} onChange={(event) => updateLine(index, { unit: event.target.value })} aria-label="Unidade" />
+                            </td>
+                            <td className="num col-price">
+                              <input type="number" min="0" step="any" inputMode="decimal" value={line.rate} onChange={(event) => updateLine(index, { rate: Number(event.target.value) })} aria-label="Preço unitário" />
+                            </td>
+                            <td className="num"><strong>{money(lineNetRaw(line))}</strong></td>
+                            <td>
+                              <button type="button" className="icon-button ghost" onClick={() => setLines(lines.filter((_, lineIndex) => lineIndex !== index))} title="Remover linha" aria-label="Remover linha">
+                                <Trash2 size={16} />
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              {missingCategoryCount > 0 && showLineErrors && (
+                <p className="field-error">{missingCategoryCount} linha(s) sem rubrica.</p>
+              )}
+            </section>
+
+            <section className="card price-card">
+              <div className="section-title">
+                <h2>Preçário · {supplier?.supplier_name ?? "—"} · {project?.project_name ?? "—"}</h2>
+              </div>
+              {priceLoading ? (
+                <p className="muted card-body">A carregar…</p>
+              ) : priceItems.length === 0 ? (
+                <p className="muted card-body">Ainda não há preçário para este fornecedor nesta obra. Pode criá-lo em Preçários.</p>
+              ) : (
+                <ul className="price-list">
+                  {priceItems.map((item) => {
+                    const qty = quantityInLines(item);
+                    return (
+                      <li key={item.id}>
+                        <span className="pl-main">
+                          <span>{item.description}</span>
+                          <small className="muted">{[item.item_ref, `${money(Number(item.unit_price))} / ${item.unit}`].filter(Boolean).join(" · ")}</small>
+                        </span>
+                        {qty > 0 && <span className="pl-qty">{qty.toLocaleString("pt-PT")} {item.unit}</span>}
+                        <button type="button" className={qty > 0 ? "ghost sm" : "outline sm"} onClick={() => addFromPriceList(item)}>
+                          <Plus size={14} /> {qty > 0 ? "Mais 1" : "Juntar"}
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </section>
+          </>
         )}
-        <div className="button-row">
-          {missingCategoryCount > 0 && (
-            <span style={{ color: "var(--red-text, #c41d2d)", fontWeight: 600, alignSelf: "center" }}>
-              {missingCategoryCount} linha(s) sem subcategoria
-            </span>
-          )}
-          <button
-            type="submit"
-            disabled={busy}
-            className={canValidateAfterSave ? "secondary" : undefined}
-            onClick={() => {
-              validateAfterSave.current = false;
-            }}
-          >
-            <Save size={16} />
-            {editingPurchaseOrder ? "Guardar alterações" : "Guardar rascunho"}
-          </button>
-          {canValidateAfterSave && (
-            <button
-              type="submit"
-              disabled={busy}
-              onClick={() => {
-                validateAfterSave.current = true;
-              }}
-            >
-              <Check size={16} />
-              {overLimit ? "Guardar e submeter para aprovação" : "Guardar e validar"}
+
+        {step === 2 && (
+          <section className="card wizard-card">
+            <div className="wizard-label-row">
+              <h3 className="wizard-label">Entrega</h3>
+              {projectHasDefaults && <Badge tone="neutral">Pré-preenchido com os dados da obra</Badge>}
+            </div>
+            <div className="form-grid wizard-grid">
+              <label>
+                Data de entrega
+                <input type="date" value={form.delivery_date} onChange={(event) => setForm({ ...form, delivery_date: event.target.value })} />
+              </label>
+              <label>
+                Hora
+                <select value={form.delivery_time} onChange={(event) => setForm({ ...form, delivery_time: event.target.value })}>
+                  <option value="">Selecionar hora</option>
+                  {DELIVERY_TIME_OPTIONS.filter(Boolean).map((option) => (
+                    <option value={option} key={option}>{option}</option>
+                  ))}
+                  {form.delivery_time && !DELIVERY_TIME_OPTIONS.includes(form.delivery_time) && <option value={form.delivery_time}>{form.delivery_time}</option>}
+                </select>
+              </label>
+              <label>
+                Condições de pagamento
+                <select
+                  value={PAYMENT_TERMS_OPTIONS.includes(form.payment_terms) ? form.payment_terms : "__outro__"}
+                  onChange={(event) => setForm({ ...form, payment_terms: event.target.value === "__outro__" ? "" : event.target.value })}
+                >
+                  {PAYMENT_TERMS_OPTIONS.map((option) => (
+                    <option value={option} key={option}>{option}</option>
+                  ))}
+                  <option value="__outro__">Outro (especificar)</option>
+                </select>
+                {!PAYMENT_TERMS_OPTIONS.includes(form.payment_terms) && (
+                  <input placeholder="Especificar condições" value={form.payment_terms} onChange={(event) => setForm({ ...form, payment_terms: event.target.value })} />
+                )}
+              </label>
+              <label className="wide">
+                Morada de entrega
+                <textarea rows={2} value={form.delivery_address} onChange={(event) => setForm({ ...form, delivery_address: event.target.value })} />
+              </label>
+              <label className="wide">
+                Contacto na obra
+                <select
+                  value={showContactText ? CONTACT_OTHER : contactSelectValue}
+                  onChange={(event) => {
+                    const value = event.target.value;
+                    if (value === CONTACT_OTHER) {
+                      setContactCustom(true);
+                      return;
+                    }
+                    setContactCustom(false);
+                    setForm({ ...form, site_contact: value === CONTACT_ALL ? siteContactOptions.join("\n") : value });
+                  }}
+                >
+                  <option value="">Sem contacto</option>
+                  {siteContactOptions.map((option) => (
+                    <option value={option} key={option}>{option}</option>
+                  ))}
+                  {siteContactOptions.length > 1 && <option value={CONTACT_ALL}>Todos os contactos da obra</option>}
+                  <option value={CONTACT_OTHER}>Outro (escrever)</option>
+                </select>
+                {showContactText && (
+                  <textarea rows={3} value={form.site_contact} onChange={(event) => setForm({ ...form, site_contact: event.target.value })} placeholder={"Um por linha. Ex.:\nJoão Silva (encarregado) - 937 128 143"} />
+                )}
+              </label>
+              <label>
+                Requisitos de veículo
+                <input value={form.vehicle_requirements} onChange={(event) => setForm({ ...form, vehicle_requirements: event.target.value })} />
+              </label>
+              <label className="wide">
+                Descarga
+                <textarea rows={2} value={form.offloading_instructions} onChange={(event) => setForm({ ...form, offloading_instructions: event.target.value })} />
+              </label>
+              <label className="wide">
+                Instruções de entrega
+                <textarea rows={2} value={form.delivery_instructions} onChange={(event) => setForm({ ...form, delivery_instructions: event.target.value })} />
+              </label>
+            </div>
+            <div className="wizard-block">
+              <h3 className="wizard-label">Documento</h3>
+              <div className="form-grid wizard-grid">
+                <label>
+                  Data da adjudicação
+                  <input type="date" value={form.po_date} onChange={(event) => setForm({ ...form, po_date: event.target.value })} />
+                </label>
+                <label>
+                  Código de obra na fatura
+                  <input placeholder="ex: 24-26256" value={form.invoice_project_code} onChange={(event) => setForm({ ...form, invoice_project_code: event.target.value })} />
+                </label>
+                <label>
+                  Requisitante
+                  <div className="readonly-field">
+                    <strong>{requesterName}</strong>
+                    <span>{requesterInitials || "Faltam iniciais"}</span>
+                  </div>
+                </label>
+                <label className="wide">
+                  Notas
+                  <textarea rows={2} value={form.notes} onChange={(event) => setForm({ ...form, notes: event.target.value })} />
+                </label>
+              </div>
+              <div className="checks">
+                <label className="check">
+                  <input type="checkbox" checked={form.include_driver_leaflet} onChange={(event) => setForm({ ...form, include_driver_leaflet: event.target.checked })} />
+                  <span>Folheto de instruções para o motorista</span>
+                </label>
+                <label className="check">
+                  <input type="checkbox" checked={form.include_terms_conditions} onChange={(event) => setForm({ ...form, include_terms_conditions: event.target.checked })} />
+                  <span>Condições gerais de compra</span>
+                </label>
+              </div>
+            </div>
+          </section>
+        )}
+
+        {step === 3 && (
+          <>
+            <section className="card wizard-card">
+              <h3 className="wizard-label">Rever</h3>
+              <dl className="review">
+                <div><dt>Obra</dt><dd>{project?.project_name ?? "—"}</dd><dd><button type="button" className="link-button" onClick={() => goToStep(0)}>Alterar</button></dd></div>
+                <div><dt>Fornecedor</dt><dd>{supplier?.supplier_name ?? "—"}</dd><dd><button type="button" className="link-button" onClick={() => goToStep(0)}>Alterar</button></dd></div>
+                <div>
+                  <dt>Artigos</dt>
+                  <dd>
+                    {cleanLines.length} {cleanLines.length === 1 ? "artigo" : "artigos"} · {money(subtotal)} líquido
+                    <small className="muted review-lines">{cleanLines.slice(0, 4).map((line) => line.description).join(" · ")}{cleanLines.length > 4 ? ` · +${cleanLines.length - 4}` : ""}</small>
+                  </dd>
+                  <dd><button type="button" className="link-button" onClick={() => goToStep(1)}>Alterar</button></dd>
+                </div>
+                <div>
+                  <dt>Entrega</dt>
+                  <dd>
+                    {form.delivery_date ? shortDate(form.delivery_date) : "Sem data"}{form.delivery_time ? ` · ${form.delivery_time}` : ""}
+                    {form.delivery_address && <small className="muted review-lines">{form.delivery_address}</small>}
+                  </dd>
+                  <dd><button type="button" className="link-button" onClick={() => goToStep(2)}>Alterar</button></dd>
+                </div>
+                <div><dt>Contacto na obra</dt><dd className="pre-line">{form.site_contact || "—"}</dd><dd><button type="button" className="link-button" onClick={() => goToStep(2)}>Alterar</button></dd></div>
+                <div><dt>Pagamento</dt><dd>{form.payment_terms || "—"}</dd><dd><button type="button" className="link-button" onClick={() => goToStep(2)}>Alterar</button></dd></div>
+                <div>
+                  <dt>Documentos</dt>
+                  <dd>{[form.include_driver_leaflet ? "Folheto do motorista" : "", form.include_terms_conditions ? "Condições gerais" : ""].filter(Boolean).join(" · ") || "Só a adjudicação"}</dd>
+                  <dd><button type="button" className="link-button" onClick={() => goToStep(2)}>Alterar</button></dd>
+                </div>
+                <div><dt>Total c/ IVA</dt><dd><strong>{money(grandTotal)}</strong></dd><dd /></div>
+              </dl>
+            </section>
+
+            {needsApproval && myLimit !== null && (
+              <section className="card approval-pick">
+                <div className="section-title"><h2>Precisa de aprovação</h2></div>
+                <div className="card-body">
+                  <p>
+                    O total de <strong>{money(grandTotal)}</strong> c/ IVA ultrapassa o seu limite de <strong>{money(myLimit)}</strong>.
+                    Escolha quem aprova: só aparecem pessoas com limite suficiente e acesso a {project?.project_name ?? "esta obra"}.
+                  </p>
+                  {approvers.length === 0 ? (
+                    <p className="notice error">Não há aprovadores disponíveis para esta obra com limite suficiente. Contacte um administrador.</p>
+                  ) : (
+                    <ul className="approver-list" role="radiogroup" aria-label="Aprovador">
+                      {approvers.map((member) => (
+                        <li key={member.id}>
+                          <button
+                            type="button"
+                            role="radio"
+                            aria-checked={approverId === member.id}
+                            className={approverId === member.id ? "pick selected" : "pick"}
+                            onClick={() => setApproverId(member.id)}
+                          >
+                            <Avatar name={member.full_name} />
+                            <span className="pick-main">
+                              <strong>{member.full_name}</strong>
+                              <small>{member.authority_limit != null ? `Limite ${moneyRound(member.authority_limit)}` : "Sem limite"}</small>
+                            </span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              </section>
+            )}
+          </>
+        )}
+
+        <div className="wizard-nav">
+          {step > 0 ? (
+            <button type="button" className="outline" onClick={() => goToStep(step - 1)}>
+              <ArrowLeft size={16} /> Anterior
+            </button>
+          ) : (
+            <button type="button" className="ghost" onClick={() => void cancel()}>
+              <X size={16} /> Cancelar
             </button>
           )}
-          {editingPurchaseOrder && (
-            <button type="button" className="secondary" onClick={onDone}>
-              <X size={16} />
-              Cancelar edição
+          <span className="spacer" />
+          {!isRevision && (
+            <button type="button" className="ghost" disabled={busy} onClick={() => void save("draft")}>
+              <Save size={16} /> Guardar rascunho
             </button>
           )}
-          {!editingPurchaseOrder && (
-            <button type="button" className="secondary" onClick={onDone}>
-              <X size={16} />
-              Cancelar
+          {step < 3 ? (
+            <button type="submit" className="primary">
+              Seguinte <ArrowRight size={16} />
+            </button>
+          ) : isRevision ? (
+            <button type="button" className="primary" disabled={busy} onClick={() => void save("draft")}>
+              <Save size={16} /> Guardar revisão
+            </button>
+          ) : !canValidateAfterSave ? (
+            <button type="button" className="primary" disabled={busy} onClick={() => void save("draft")}>
+              <Save size={16} /> Guardar alterações
+            </button>
+          ) : needsApproval ? (
+            <button type="button" className="primary" disabled={busy || !approverId} onClick={() => void save("approval")}>
+              <Send size={16} /> Submeter para aprovação
+            </button>
+          ) : (
+            <button type="button" className="primary" disabled={busy} onClick={() => void save("validate")}>
+              <CircleCheck size={16} /> Guardar e validar
             </button>
           )}
-        </div>
         </div>
       </form>
-    </section>
+
+      <aside className="po-summary">
+        <p className="summary-label">Nº provisório</p>
+        <p className="summary-number">{provisional ?? "Atribuído ao guardar"}</p>
+        <p className="summary-note">Centro de custo · fornecedor · iniciais. Fica definitivo ao guardar.</p>
+        <dl className="summary-kv">
+          <div><dt>Obra</dt><dd>{project?.project_name ?? "—"}</dd></div>
+          <div><dt>Fornecedor</dt><dd>{supplier?.supplier_name ?? "—"}</dd></div>
+          <div><dt>Líquido</dt><dd>{money(subtotal)}</dd></div>
+          <div><dt>IVA</dt><dd>{money(vatTotal)}</dd></div>
+          <div className="total"><dt>Total</dt><dd>{money(grandTotal)}</dd></div>
+        </dl>
+        {myLimit !== null && !iAmAdmin ? (
+          <div className="limit-box">
+            <div className="limit-head">
+              <span>Limite de autoridade</span>
+              <span>{Math.round((grandTotal / myLimit) * 100)}%</span>
+            </div>
+            <span className="progress wide"><i className={overLimit ? "late" : undefined} style={{ width: `${Math.round(limitPct * 100)}%` }} /></span>
+            {overLimit ? (
+              <p className="limit-text over">Acima do seu limite de {moneyRound(myLimit)} c/ IVA. No último passo escolhe quem aprova.</p>
+            ) : (
+              <p className="limit-text">Dentro do seu limite. Pode validar diretamente.</p>
+            )}
+          </div>
+        ) : (
+          <p className="limit-text">{iAmAdmin ? "Administrador: pode validar diretamente." : "Sem limite definido: pode validar diretamente."}</p>
+        )}
+      </aside>
+
+      {pasteOpen && (
+        <div className="modal-overlay" onClick={() => setPasteOpen(false)}>
+          <div className="modal-card paste-modal" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
+            <h3>Colar linhas do Excel</h3>
+            <p className="muted">
+              No Excel, selecione as células e copie (Ctrl+C). Cole aqui com Ctrl+V.
+              A ordem das colunas deve ser: <strong>Ref. | Descrição | Qtd | Unidade | Preço</strong>.
+            </p>
+            <textarea
+              rows={8}
+              value={pasteText}
+              onChange={(e) => setPasteText(e.target.value)}
+              placeholder={"Cole aqui...\n\nExemplo:\nART-01\tBetão C30/37\t450\tm3\t82,50 €"}
+            />
+            {pasteText.trim() !== "" && (() => {
+              const previstas = parseExcelLines(pasteText);
+              if (previstas.length === 0) {
+                return <p className="notice error">Não foi possível ler nenhuma linha. Confirme que copiou do Excel (as colunas devem vir separadas por tabulação).</p>;
+              }
+              const semPreco = previstas.filter((l) => l.rate === 0).length;
+              return (
+                <>
+                  <p className="paste-resumo">
+                    <strong>{previstas.length}</strong> linha(s) reconhecida(s)
+                    {semPreco > 0 && <span className="paste-aviso"> · {semPreco} sem preço (ficam a 0)</span>}
+                  </p>
+                  <div className="table-wrap paste-preview">
+                    <table className="recon-table">
+                      <thead>
+                        <tr><th>Ref.</th><th>Descrição</th><th className="num">Qtd</th><th>Un.</th><th className="num">Preço</th><th className="num">Total</th></tr>
+                      </thead>
+                      <tbody>
+                        {previstas.slice(0, 50).map((l, i) => (
+                          <tr key={i}>
+                            <td>{l.item_ref || "—"}</td>
+                            <td>{l.description}</td>
+                            <td className="num">{l.quantity}</td>
+                            <td>{l.unit}</td>
+                            <td className="num">{money(l.rate)}</td>
+                            <td className="num">{money(l.quantity * l.rate)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {previstas.length > 50 && <p className="muted">…e mais {previstas.length - 50} linha(s).</p>}
+                  </div>
+                </>
+              );
+            })()}
+            <div className="modal-actions">
+              <button type="button" className="ghost" onClick={() => { setPasteOpen(false); setPasteText(""); }}>Cancelar</button>
+              <button type="button" onClick={adicionarLinhasColadas} disabled={parseExcelLines(pasteText).length === 0}>
+                Adicionar {parseExcelLines(pasteText).length || ""} linha(s)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }

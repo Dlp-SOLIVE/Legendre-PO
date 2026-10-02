@@ -236,7 +236,16 @@ export function ProcurementShell({ session }: { session: Session }) {
     }
   }
 
-  async function handlePurchaseOrderSaved(savedPurchaseOrderId: string, thenValidate = false) {
+  async function handlePurchaseOrderSaved(savedPurchaseOrderId: string, thenValidate = false, approverId?: string) {
+    if (approverId) {
+      // Nova adjudicação acima do limite: o aprovador foi escolhido no último passo do formulário
+      try {
+        await submitForApproval(savedPurchaseOrderId, approverId);
+        pushToast("Submetido para aprovação.");
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Não foi possível submeter para aprovação.");
+      }
+    }
     const refreshed = await refresh();
     const savedPurchaseOrder = refreshed?.purchaseOrders.find((po) => po.id === savedPurchaseOrderId);
 
@@ -249,7 +258,7 @@ export function ProcurementShell({ session }: { session: Session }) {
       await handleValidatePurchaseOrder(savedPurchaseOrder);
       return;
     }
-    setPreviewPurchaseOrder(savedPurchaseOrder);
+    setDrawerPoId(savedPurchaseOrder.id);
   }
 
   async function refreshView() {
@@ -282,14 +291,18 @@ export function ProcurementShell({ session }: { session: Session }) {
 
   // Lista de aprovadores possíveis: limite suficiente (ou admin) E acesso à obra
   function possibleApprovers(po: PurchaseOrder) {
+    return approversFor(po.project_id, po.grand_total);
+  }
+
+  function approversFor(projectId: string, grandTotal: number) {
     return references.staff.filter((m) => {
       if (!m.is_active) return false;
       if (m.id === currentStaff?.id) return false; // não a si próprio
       const isAdmin = normalizeRole(m.role) === "admin";
-      const hasLimit = isAdmin || (m.authority_limit != null && m.authority_limit >= po.grand_total);
+      const hasLimit = isAdmin || (m.authority_limit != null && m.authority_limit >= grandTotal);
       if (!hasLimit) return false;
       const hasAccess = isAdmin || references.projectAccess.some(
-        (pa) => pa.staff_member_id === m.id && pa.project_id === po.project_id,
+        (pa) => pa.staff_member_id === m.id && pa.project_id === projectId,
       );
       return hasAccess;
     });
@@ -776,9 +789,13 @@ export function ProcurementShell({ session }: { session: Session }) {
             )}
             {view === "new-po" && (
               <POForm
+                key={editingPurchaseOrder?.id ?? "nova"}
                 currentStaff={currentStaff}
                 editingPurchaseOrder={editingPurchaseOrder}
                 references={references}
+                purchaseOrders={purchaseOrders}
+                approversFor={approversFor}
+                onNewSupplier={() => goTo("suppliers")}
                 onSaved={handlePurchaseOrderSaved}
                 onDone={() => {
                   setEditingPurchaseOrder(null);
