@@ -1,15 +1,16 @@
-import type React from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Camera, Check, X } from "lucide-react";
+import { Camera, Check, Search, X } from "lucide-react";
 import { createDeliveryNote, loadReconciliation, uploadAnexo } from "./lib/data";
-import { isoToday, shortDate } from "./lib/format";
+import { isoToday, lineNet, shortDate } from "./lib/format";
+import { deliveredPct } from "./shared";
 import type { LineReconciliation, PurchaseOrder } from "./types";
 
-// Receber material — pensado para o telemóvel, em obra.
-// 1) escolher a adjudicação  2) fotografar a guia (obrigatório)  3) "Recebi tudo" ou quantidades.
+// Receber material — lista das enviadas por entregar + registo da guia (funciona também no telemóvel, em obra).
+// 1) escolher a adjudicação  2) indicar o que veio nesta guia  3) anexar a guia e registar.
 
 type Props = {
   purchaseOrders: PurchaseOrder[];
+  delivered: Record<string, number>;
   initialPoId?: string | null;
   onDone: (message: string) => void | Promise<void>;
   onCancel: () => void;
@@ -41,24 +42,22 @@ function parseQty(value: string | undefined): number {
   return Number.isFinite(n) ? n : 0;
 }
 
-const card: React.CSSProperties = {
-  background: "#fff",
-  border: "1px solid var(--line, #e4e6eb)",
-  borderRadius: 12,
-  padding: "12px 14px",
-};
-
-export function ReceiveMaterialView({ purchaseOrders, initialPoId, onDone, onCancel }: Props) {
+export function ReceiveMaterialView({ purchaseOrders, delivered, initialPoId, onDone, onCancel }: Props) {
+  const today = isoToday();
+  // Enviadas (e validadas ainda não marcadas como enviadas) que ainda não foram entregues na totalidade
   const candidates = useMemo(
     () =>
       purchaseOrders
-        .filter((po) => po.status === "validated")
-        .sort((a, b) => String(a.delivery_date ?? "9999").localeCompare(String(b.delivery_date ?? "9999"))),
-    [purchaseOrders],
+        .filter((po) => po.status === "validated" && deliveredPct(po, delivered) < 0.999)
+        .sort((a, b) =>
+          Number(Boolean(b.sent_to_supplier_at)) - Number(Boolean(a.sent_to_supplier_at)) ||
+          String(a.delivery_date ?? "9999").localeCompare(String(b.delivery_date ?? "9999")),
+        ),
+    [purchaseOrders, delivered],
   );
   const [poId, setPoId] = useState<string>(initialPoId ?? "");
   const [search, setSearch] = useState("");
-  const po = candidates.find((item) => item.id === poId) ?? null;
+  const po = purchaseOrders.find((item) => item.id === poId && item.status === "validated") ?? null;
 
   const [recon, setRecon] = useState<LineReconciliation[]>([]);
   const [loadingRecon, setLoadingRecon] = useState(false);
@@ -66,8 +65,7 @@ export function ReceiveMaterialView({ purchaseOrders, initialPoId, onDone, onCan
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [preparing, setPreparing] = useState(false);
   const [guiaNumber, setGuiaNumber] = useState("");
-  const [date, setDate] = useState(isoToday());
-  const [mode, setMode] = useState<"all" | "partial">("all");
+  const [date, setDate] = useState(today);
   const [qty, setQty] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -107,11 +105,13 @@ export function ReceiveMaterialView({ purchaseOrders, initialPoId, onDone, onCan
 
   const items = (po?.line_items ?? []).filter((li): li is typeof li & { id: string } => Boolean(li.id));
   const reconById = new Map(recon.map((row) => [row.line_item_id, row]));
+  const received = (id: string) => Number(reconById.get(id)?.qty_received ?? 0);
   const outstanding = (id: string, ordered: number) => {
     const row = reconById.get(id);
     return Math.max(0, row ? Number(row.qty_ordered) - Number(row.qty_received) : ordered);
   };
   const allDelivered = items.length > 0 && items.every((li) => outstanding(li.id, Number(li.quantity)) <= 0);
+  const hasQuantities = items.some((li) => parseQty(qty[li.id]) > 0);
 
   async function onPhotoChosen(file: File | null) {
     setError(null);
@@ -129,25 +129,37 @@ export function ReceiveMaterialView({ purchaseOrders, initialPoId, onDone, onCan
     setPhoto(null);
     setGuiaNumber("");
     setQty({});
-    setMode("all");
     setError(null);
+  }
+
+  function fillOutstanding() {
+    const next: Record<string, string> = {};
+    items.forEach((li) => {
+      const left = outstanding(li.id, Number(li.quantity));
+      if (left > 0) next[li.id] = String(left).replace(".", ",");
+    });
+    setQty(next);
   }
 
   async function save() {
     if (!po) return;
     setError(null);
     if (!photo) {
-      setError("Fotografe a guia antes de registar.");
+      setError("Anexe a fotografia ou o PDF da guia antes de registar.");
       return;
     }
-    const lines = items.map((li) => ({
-      line_item_id: li.id,
-      quantity_received: mode === "all" ? outstanding(li.id, Number(li.quantity)) : parseQty(qty[li.id]),
-    }));
+    const lines = items.map((li) => ({ line_item_id: li.id, quantity_received: parseQty(qty[li.id]) }));
     if (lines.every((line) => line.quantity_received <= 0)) {
-      setError(mode === "all" ? "Esta adjudicação já foi toda recebida." : "Indique pelo menos uma quantidade recebida.");
+      setError("Indique pelo menos uma quantidade recebida.");
       return;
     }
+    // valor desta guia ao preço da adjudicação → % entregue depois de registar
+    const guiaValue = items.reduce((sum, li) => {
+      const q = Number(li.quantity);
+      return sum + (q !== 0 ? (lineNet(li) / q) * parseQty(qty[li.id]) : 0);
+    }, 0);
+    const subtotal = Number(po.subtotal ?? 0);
+    const pctAfter = subtotal > 0 ? Math.min(100, Math.round((((delivered[po.id] ?? 0) + guiaValue) / subtotal) * 100)) : 0;
     setSaving(true);
     try {
       const path = await uploadAnexo(photo, `guias/${po.id}`);
@@ -156,219 +168,172 @@ export function ReceiveMaterialView({ purchaseOrders, initialPoId, onDone, onCan
         { guia_number: guiaNumber.trim() || null, delivery_date: date, notes: null, attachment_url: path },
         lines,
       );
-      await onDone(`Guia registada em ${po.po_number}.`);
+      await onDone(`Guia registada em ${po.po_number} · ${pctAfter}% entregue.`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Não foi possível registar a guia.");
       setSaving(false);
     }
   }
 
-  // ── Passo 1: escolher a adjudicação ──
-  if (!po) {
-    const q = search.trim().toLowerCase();
-    const list = candidates.filter((item) =>
-      !q ||
-      `${item.po_number} ${item.supplier?.supplier_name ?? ""} ${item.project?.project_name ?? ""}`.toLowerCase().includes(q),
-    );
-    return (
-      <section className="work-section" style={{ maxWidth: 560 }}>
-        <div className="section-heading">
-          <h2>Receber material</h2>
-        </div>
-        <p className="muted">Escolha a adjudicação da entrega. Só aparecem adjudicações validadas.</p>
-        <input
-          type="search"
-          placeholder="Nº, fornecedor ou obra…"
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-          aria-label="Procurar adjudicação"
-          style={{ width: "100%", fontSize: 16, padding: "12px 14px", borderRadius: 10, margin: "8px 0 12px" }}
-        />
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {list.slice(0, 40).map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => choose(item.id)}
-              style={{ ...card, textAlign: "left", color: "inherit", display: "flex", flexDirection: "column", gap: 2, cursor: "pointer" }}
-            >
-              <strong>{item.po_number}</strong>
-              <span className="muted">
-                {item.supplier?.supplier_name ?? "—"} · {item.project?.project_name ?? "—"}
-                {item.delivery_date ? ` · entrega ${shortDate(item.delivery_date)}` : ""}
-              </span>
-            </button>
-          ))}
-          {list.length === 0 && <p className="muted">Nenhuma adjudicação validada corresponde à pesquisa.</p>}
-        </div>
-        <div className="button-row" style={{ marginTop: 16 }}>
-          <button type="button" className="secondary" onClick={onCancel}>
-            <X size={16} />
-            Cancelar
-          </button>
-        </div>
-      </section>
-    );
-  }
+  const q = search.trim().toLowerCase();
+  const list = candidates.filter((item) =>
+    !q || `${item.po_number} ${item.supplier?.supplier_name ?? ""} ${item.project?.project_name ?? ""}`.toLowerCase().includes(q),
+  );
 
-  // ── Passos 2 e 3: foto + quantidades ──
   return (
-    <section className="work-section" style={{ maxWidth: 560 }}>
-      <div className="section-heading">
-        <h2>Receber material</h2>
-      </div>
-      <div style={{ ...card, display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
-        <div style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
-          <strong>{po.po_number}</strong>
-          <span className="muted">
-            {po.supplier?.supplier_name ?? "—"} · {po.project?.project_name ?? "—"}
-          </span>
+    <div className="receive">
+      <section className="card receive-list">
+        <div className="section-title"><h2>Enviadas, por entregar</h2></div>
+        <div className="receive-search">
+          <label className="search-field">
+            <Search size={16} aria-hidden="true" />
+            <input type="search" placeholder="Nº, fornecedor ou obra…" value={search} onChange={(event) => setSearch(event.target.value)} aria-label="Procurar adjudicação" />
+          </label>
         </div>
-        {!initialPoId && (
-          <button type="button" className="link-button" onClick={() => setPoId("")}>
-            Trocar
-          </button>
-        )}
-      </div>
-
-      <input
-        ref={fileRef}
-        type="file"
-        accept="image/*,application/pdf"
-        capture="environment"
-        style={{ display: "none" }}
-        onChange={(event) => onPhotoChosen(event.target.files?.[0] ?? null)}
-      />
-      <button
-        type="button"
-        onClick={() => fileRef.current?.click()}
-        style={{
-          marginTop: 12,
-          width: "100%",
-          minHeight: photoUrl ? 0 : 150,
-          borderRadius: 12,
-          border: photo ? "1px solid var(--line, #e4e6eb)" : "2px dashed var(--navy, #143a67)",
-          background: photo ? "#fff" : "#eef2f8",
-          color: "var(--navy, #143a67)",
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          justifyContent: "center",
-          gap: 6,
-          padding: photoUrl ? 8 : 16,
-          cursor: "pointer",
-        }}
-      >
-        {photoUrl && photo?.type.startsWith("image/") ? (
-          <>
-            <img src={photoUrl} alt="Foto da guia" style={{ width: "100%", maxHeight: 260, objectFit: "contain", borderRadius: 8 }} />
-            <span style={{ fontWeight: 600 }}>Tirar outra foto</span>
-          </>
-        ) : photo ? (
-          <span style={{ fontWeight: 600 }}>{photo.name} · trocar</span>
-        ) : (
-          <>
-            <Camera size={32} />
-            <span style={{ fontWeight: 700, fontSize: 16 }}>{preparing ? "A preparar a foto…" : "Fotografar guia"}</span>
-            <span className="muted">Abre a câmara · obrigatório</span>
-          </>
-        )}
-      </button>
-
-      <div className="form-grid" style={{ marginTop: 12 }}>
-        <label>
-          Nº da guia <small className="muted">(opcional)</small>
-          <input value={guiaNumber} onChange={(event) => setGuiaNumber(event.target.value)} placeholder="ex.: GT 2026/4471" />
-        </label>
-        <label>
-          Data de entrega
-          <input type="date" value={date} onChange={(event) => setDate(event.target.value)} />
-        </label>
-      </div>
-
-      <div
-        role="radiogroup"
-        aria-label="Quantidade recebida"
-        style={{ display: "grid", gridTemplateColumns: "1fr 1fr", background: "#e9ebef", borderRadius: 10, padding: 3, marginTop: 12 }}
-      >
-        {(["all", "partial"] as const).map((key) => (
-          <button
-            key={key}
-            type="button"
-            role="radio"
-            aria-checked={mode === key}
-            onClick={() => setMode(key)}
-            style={{
-              padding: 10,
-              borderRadius: 8,
-              border: "none",
-              background: mode === key ? "#fff" : "transparent",
-              color: mode === key ? "var(--navy, #143a67)" : "var(--muted, #6f6e6e)",
-              fontWeight: mode === key ? 700 : 500,
-              boxShadow: mode === key ? "0 1px 2px rgba(0,0,0,.08)" : "none",
-              cursor: "pointer",
-            }}
-          >
-            {key === "all" ? "Recebi tudo" : "Parcial"}
-          </button>
-        ))}
-      </div>
-
-      <div style={{ ...card, padding: 0, marginTop: 12 }}>
-        {loadingRecon && <p className="muted" style={{ padding: 12 }}>A carregar linhas…</p>}
-        {!loadingRecon &&
-          items.map((li) => {
-            const left = outstanding(li.id, Number(li.quantity));
-            const typed = parseQty(qty[li.id]);
+        <ul className="pick-list flush" role="listbox" aria-label="Adjudicações por entregar">
+          {list.slice(0, 60).map((item) => {
+            const pct = Math.round(Math.min(1, deliveredPct(item, delivered)) * 100);
+            const late = Boolean(item.sent_to_supplier_at && item.delivery_date && String(item.delivery_date) < today);
             return (
-              <div
-                key={li.id}
-                style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "10px 14px", borderTop: "1px solid #eef0f3" }}
-              >
-                <div style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
-                  <span>{li.description}</span>
-                  <small className="muted">
-                    falta receber {left} {li.unit}
-                  </small>
-                  {mode === "partial" && typed > left && (
-                    <small className="flag-warn">Acima do que falta receber</small>
-                  )}
-                </div>
-                {mode === "all" ? (
-                  <strong style={{ whiteSpace: "nowrap" }}>
-                    {left} {li.unit}
-                  </strong>
-                ) : (
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    value={qty[li.id] ?? ""}
-                    onChange={(event) => setQty({ ...qty, [li.id]: event.target.value })}
-                    placeholder="0"
-                    aria-label={`Quantidade recebida de ${li.description}`}
-                    style={{ width: 90, fontSize: 16, textAlign: "right" }}
-                  />
-                )}
-              </div>
+              <li key={item.id}>
+                <button type="button" role="option" aria-selected={poId === item.id} className={poId === item.id ? "pick selected" : "pick"} onClick={() => choose(item.id)}>
+                  <span className="pick-main">
+                    <strong>{item.po_number}</strong>
+                    <small>{item.supplier?.supplier_name ?? "—"} · {item.project?.project_name ?? "—"}</small>
+                    <small className={late ? "late-text" : undefined}>
+                      {!item.sent_to_supplier_at
+                        ? `Ainda não marcada como enviada · ${pct}% entregue`
+                        : item.delivery_date
+                          ? `${late ? "Atrasada desde" : "Prevista"} ${shortDate(item.delivery_date).slice(0, 5)} · ${pct}% entregue`
+                          : `${pct}% entregue`}
+                    </small>
+                  </span>
+                </button>
+              </li>
             );
           })}
-        {!loadingRecon && allDelivered && (
-          <p className="notice" style={{ margin: 12 }}>Tudo o que foi encomendado já está recebido.</p>
+          {list.length === 0 && <li className="muted pick-empty">Nada por entregar{q ? " com esta pesquisa" : ""}.</li>}
+        </ul>
+      </section>
+
+      <div className="receive-detail">
+        {!po ? (
+          <section className="card">
+            <p className="empty-state">Escolha à esquerda a adjudicação da entrega.</p>
+          </section>
+        ) : (
+          <>
+            <section className="card">
+              <div className="section-title">
+                <h2>{po.po_number} · {po.supplier?.supplier_name ?? "—"}</h2>
+                {!allDelivered && (
+                  <button type="button" className="link-button section-title-aside" onClick={fillOutstanding}>
+                    Recebi tudo o que falta
+                  </button>
+                )}
+              </div>
+              {loadingRecon ? (
+                <p className="muted card-body">A carregar linhas…</p>
+              ) : (
+                <div className="table-wrap flush">
+                  <table className="receive-table">
+                    <thead>
+                      <tr>
+                        <th>Artigo</th>
+                        <th className="num">Encomendado</th>
+                        <th className="num">Já recebido</th>
+                        <th className="num">Nesta guia</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {items.map((li) => {
+                        const left = outstanding(li.id, Number(li.quantity));
+                        const typed = parseQty(qty[li.id]);
+                        return (
+                          <tr key={li.id}>
+                            <td>
+                              {li.description}
+                              {typed > left && <small className="cell-sub flag-warn">Acima do que falta receber ({fmtQty(left)} {li.unit})</small>}
+                            </td>
+                            <td className="num">{fmtQty(Number(li.quantity))} {li.unit}</td>
+                            <td className="num">{fmtQty(received(li.id))} {li.unit}</td>
+                            <td className="num">
+                              <span className="qty-field">
+                                <input
+                                  type="text"
+                                  inputMode="decimal"
+                                  value={qty[li.id] ?? ""}
+                                  onChange={(event) => setQty({ ...qty, [li.id]: event.target.value })}
+                                  placeholder="0"
+                                  aria-label={`Quantidade recebida de ${li.description}`}
+                                  disabled={left <= 0 && !qty[li.id]}
+                                />
+                                <span>{li.unit}</span>
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              {!loadingRecon && allDelivered && <p className="notice receive-done">Tudo o que foi encomendado já está recebido.</p>}
+            </section>
+
+            <section className="card card-body receive-guia">
+              <div className="form-grid wizard-grid">
+                <label>
+                  Nº da guia
+                  <input value={guiaNumber} onChange={(event) => setGuiaNumber(event.target.value)} placeholder="ex.: GT 2026/18342" />
+                </label>
+                <label>
+                  Data de receção
+                  <input type="date" value={date} onChange={(event) => setDate(event.target.value)} />
+                </label>
+              </div>
+              <input
+                ref={fileRef}
+                type="file"
+                accept="image/*,application/pdf"
+                capture="environment"
+                hidden
+                onChange={(event) => onPhotoChosen(event.target.files?.[0] ?? null)}
+              />
+              <button type="button" className={photo ? "drop-zone has" : "drop-zone"} onClick={() => fileRef.current?.click()}>
+                {photoUrl && photo?.type.startsWith("image/") ? (
+                  <>
+                    <img src={photoUrl} alt="Guia" />
+                    <span>Trocar fotografia</span>
+                  </>
+                ) : photo ? (
+                  <span>{photo.name} · trocar</span>
+                ) : (
+                  <>
+                    <Camera size={24} />
+                    <strong>{preparing ? "A preparar a fotografia…" : "Fotografia ou PDF da guia"}</strong>
+                    <small>Toque para fotografar ou escolher o ficheiro</small>
+                  </>
+                )}
+              </button>
+              {error && <p className="notice error">{error}</p>}
+              <div className="wizard-nav">
+                <button type="button" className="ghost" onClick={onCancel} disabled={saving}>
+                  <X size={16} /> Cancelar
+                </button>
+                <span className="spacer" />
+                <button type="button" className="primary" onClick={() => void save()} disabled={saving || preparing || !hasQuantities}>
+                  <Check size={16} /> {saving ? "A registar…" : "Registar guia"}
+                </button>
+              </div>
+            </section>
+          </>
         )}
       </div>
-
-      {error && <p className="notice error" style={{ marginTop: 12 }}>{error}</p>}
-
-      <div className="button-row" style={{ marginTop: 16 }}>
-        <button type="button" onClick={save} disabled={saving || preparing} style={{ flex: 1, minHeight: 48, fontSize: 16 }}>
-          <Check size={18} />
-          {saving ? "A registar…" : "Registar guia"}
-        </button>
-        <button type="button" className="secondary" onClick={onCancel} disabled={saving}>
-          <X size={16} />
-          Cancelar
-        </button>
-      </div>
-    </section>
+    </div>
   );
+}
+
+function fmtQty(value: number) {
+  return Number(value).toLocaleString("pt-PT", { maximumFractionDigits: 3 });
 }

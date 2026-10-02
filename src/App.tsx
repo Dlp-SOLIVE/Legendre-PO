@@ -760,6 +760,7 @@ export function ProcurementShell({ session }: { session: Session }) {
               <ReceiveMaterialView
                 key={receivePoId ?? "escolher"}
                 purchaseOrders={purchaseOrders}
+                delivered={delivered}
                 initialPoId={receivePoId}
                 onDone={async (message) => {
                   await refresh();
