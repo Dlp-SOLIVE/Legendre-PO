@@ -3120,3 +3120,28 @@ label.check input[type="checkbox"] { flex: 0 0 18px; min-height: 0; padding: 0; 
 .rubrica-field small { display: block; font-size: 11px; margin-top: 2px; }
 .lines-table .col-price input { width: 90px; }
 @media (max-width: 900px) { .po-summary { order: 0; } }
+
+/* ── Redesenho · Aprovações ── */
+.approval-cards { display: grid; gap: 16px; }
+.approval-card { background: #fff; border: 1px solid var(--color-black-15); display: flex; flex-wrap: wrap; }
+.ac-main { flex: 1 1 420px; min-width: 0; padding: 18px 20px; }
+.ac-head { display: flex; flex-wrap: wrap; gap: 8px 16px; justify-content: space-between; }
+.ac-num { font-family: var(--font-display); font-size: 18px; font-variant-numeric: tabular-nums; font-weight: 600; margin: 0; }
+.ac-sub { font-size: 14px; margin: 2px 0 0; }
+.ac-meta { color: var(--color-black-70); font-size: 12px; margin: 2px 0 0; }
+.ac-figures { display: flex; flex-wrap: wrap; gap: 12px 32px; margin: 16px 0; }
+.ac-figures dt { color: var(--color-black-70); font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; }
+.ac-figures dd { font-family: var(--font-display); font-size: 22px; font-variant-numeric: tabular-nums; font-weight: 600; margin: 2px 0 0; }
+.ac-why { background: var(--color-black-04); font-size: 13px; line-height: 1.5; margin: 0 0 12px; padding: 10px 14px; }
+.ac-lines { list-style: none; margin: 0; padding: 0; }
+.ac-lines li { border-top: 1px solid var(--color-black-08); display: grid; font-size: 13px; gap: 12px; grid-template-columns: minmax(0, 1fr) auto minmax(90px, auto); padding: 7px 0; }
+.ac-lines li > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ac-lines .ac-more { display: block; font-size: 12px; }
+.ac-actions { border-left: 1px solid var(--color-black-15); display: flex; flex: 0 0 200px; flex-direction: column; gap: 8px; padding: 18px; }
+.ac-actions .link-button { align-self: center; margin-top: 4px; }
+@media (max-width: 700px) {
+  .ac-actions { border-left: 0; border-top: 1px solid var(--color-black-15); flex: 1 1 100%; flex-direction: row; flex-wrap: wrap; }
+  .ac-actions button:not(.link-button) { flex: 1 1 120px; }
+  .ac-lines li { grid-template-columns: minmax(0, 1fr) auto; }
+  .ac-lines li > span.muted { display: none; }
+}

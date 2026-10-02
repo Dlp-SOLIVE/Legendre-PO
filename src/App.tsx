@@ -20,6 +20,7 @@ import { PurchaseOrders } from "./PurchaseOrdersView";
 import { POForm } from "./POFormView";
 import { PreviewModal } from "./PreviewModal";
 import { PoDrawer } from "./PoDrawer";
+import { ApprovalsView } from "./ApprovalsView";
 import { isInvoiced, type NextActionHandlers } from "./poActions";
 import { poPhase } from "./shared";
 import { Exports } from "./ExportsView";
@@ -733,59 +734,11 @@ export function ProcurementShell({ session }: { session: Session }) {
             {view === "reinvoicing" && <ReinvoicingView currentStaffId={currentStaff?.id ?? null} />}
             {view === "price-lists" && <PriceListView references={references} canWrite={canWritePo} />}
             {view === "approvals" && (
-              <section className="work-section">
-                <div className="section-heading"><h2>A aguardar a minha aprovação</h2></div>
-                {myPendingApprovals.length === 0 ? (
-                  <p className="muted">Não tem adjudicações a aguardar aprovação.</p>
-                ) : (
-                  <div className="table-wrap">
-                    <table className="recon-table">
-                      <thead>
-                        <tr>
-                          <th>Nº</th><th>Obra</th><th>Fornecedor</th><th className="num">Valor</th>
-                          <th>Criada por</th><th />
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {myPendingApprovals.map((po) => (
-                          <Fragment key={po.id}>
-                          <tr>
-                            <td>{po.po_number}</td>
-                            <td>{po.project?.project_name ?? "—"}</td>
-                            <td>{po.supplier?.supplier_name ?? "—"}</td>
-                            <td className="num">
-                              {money(po.grand_total)} c/ IVA
-                              <small className="muted" style={{ display: "block" }}>{money(po.subtotal)} líquido</small>
-                            </td>
-                            <td>{po.requester?.full_name ?? "—"}</td>
-                            <td className="approval-actions">
-                              <button className="link-button" onClick={() => setPreviewPurchaseOrder(po)}>Ver</button>
-                              <button className="approve-btn" onClick={() => handleDecideApproval(po, "approve")}>Aprovar</button>
-                              <button className="return-btn" onClick={() => handleDecideApproval(po, "return")}>Devolver</button>
-                              <button className="reject-btn" onClick={() => handleDecideApproval(po, "reject")}>Rejeitar</button>
-                            </td>
-                          </tr>
-                          <tr className="approval-context">
-                            <td colSpan={6} className="muted" style={{ fontSize: "0.85rem", paddingTop: 0 }}>
-                              {po.requester?.authority_limit != null
-                                ? `Excede o limite de ${po.requester?.full_name ?? "quem pediu"} (${money(po.requester?.authority_limit ?? 0)} c/ IVA). `
-                                : "Quem pediu não tem limite definido. "}
-                              {po.delivery_date ? `Entrega pedida: ${shortDate(po.delivery_date)}. ` : ""}
-                              {[...(po.line_items ?? [])]
-                                .sort((x, y) => lineNet(y) - lineNet(x))
-                                .slice(0, 3)
-                                .map((l) => `${l.description} (${l.quantity} ${l.unit}, ${money(lineNet(l))})`)
-                                .join(" · ")}
-                              {(po.line_items?.length ?? 0) > 3 ? ` · +${(po.line_items?.length ?? 0) - 3} linhas` : ""}
-                            </td>
-                          </tr>
-                          </Fragment>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </section>
+              <ApprovalsView
+                purchaseOrders={myPendingApprovals}
+                onDecide={(po, action) => void handleDecideApproval(po, action)}
+                onOpen={openDetail}
+              />
             )}
             {view === "new-po" && (
               <POForm
