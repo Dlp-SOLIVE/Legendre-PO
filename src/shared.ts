@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { CostCategory, Project, PurchaseOrder, PurchaseOrderStatus } from "./types";
+import type { BadgeTone } from "./ui";
 
 export const VAT_RATES = [23, 13, 6, 0];
 
@@ -44,6 +45,38 @@ export function matchesPreset(
       return true;
   }
 }
+
+// ── Fase derivada + próxima ação (redesenho) ──
+export type PoPhase = "rasc" | "devol" | "aprov" | "enviar" | "entrega" | "atraso" | "entregue" | "rej";
+
+export function deliveredPct(po: PurchaseOrder, delivered: Record<string, number>): number {
+  const subtotal = Number(po.subtotal);
+  return subtotal > 0 ? (delivered[po.id] ?? 0) / subtotal : 0;
+}
+
+// "Em atraso" usa a mesma regra do atalho "late-delivery" (data passada e ainda sem nenhuma guia)
+export function poPhase(po: PurchaseOrder, delivered: Record<string, number>, today: string): PoPhase {
+  if (po.status === "draft") return po.approval_comment ? "devol" : "rasc";
+  if (po.status === "pending_approval") return "aprov";
+  if (po.status === "rejected") return "rej";
+  if (!po.sent_to_supplier_at) return "enviar";
+  if (deliveredPct(po, delivered) >= 0.999) return "entregue";
+  if (po.delivery_date && String(po.delivery_date) < today && (delivered[po.id] ?? 0) <= 0) return "atraso";
+  return "entrega";
+}
+
+export const PHASE_META: Record<PoPhase, { label: string; tone: BadgeTone; step: number }> = {
+  rasc: { label: "Rascunho", tone: "neutral", step: 0 },
+  devol: { label: "Devolvida", tone: "warning", step: 0 },
+  aprov: { label: "Em aprovação", tone: "info", step: 0 },
+  enviar: { label: "Por enviar", tone: "accent", step: 1 },
+  entrega: { label: "Em entrega", tone: "neutral", step: 2 },
+  atraso: { label: "Entrega em atraso", tone: "danger", step: 2 },
+  entregue: { label: "Entregue", tone: "success", step: 3 },
+  rej: { label: "Rejeitada", tone: "danger", step: -1 },
+};
+
+export const PHASE_ORDER: PoPhase[] = ["rasc", "devol", "aprov", "enviar", "entrega", "atraso", "entregue", "rej"];
 
 // Etiqueta de subcategoria: "código — nome" (permite procurar pelo código)
 export function catLabel(cat: CostCategory): string {

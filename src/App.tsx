@@ -1,10 +1,10 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
-import { Archive, BarChart3, Building2, ClipboardList, Download, FilePlus2, LogOut, Package, RefreshCw, Settings, Users, TrendingUp, Repeat, CheckCircle2, Tags, Truck, Bell, Menu } from "lucide-react";
+import { Archive, BarChart3, Building2, ClipboardList, Download, Plus, LogOut, Package, RefreshCw, Settings, Users, TrendingUp, Repeat, CheckCircle2, Tags, Truck, Bell, Menu, LayoutDashboard, AlertTriangle } from "lucide-react";
 import { createPurchaseOrder, deletePurchaseOrder, deleteRow, loadPurchaseOrders, loadReferenceData, normalizeRole, roleCanAdmin, roleCanWritePo, validatePurchaseOrder, submitForApproval, decideApproval, loadDeliveredByPo, upsertCategory, upsertProject, upsertSetting, upsertSupplier, type PurchaseOrderDraft } from "./lib/data";
 import { hasSupabaseConfig, supabase } from "./lib/supabase";
 import { onConfirmRequest } from "./lib/dialog";
-import { isoToday, lineNet, money, shortDate } from "./lib/format";
+import { isoToday, lineNet, money, moneyRound, shortDate } from "./lib/format";
 import { AccrualsView } from "./AccrualsView";
 import { ReinvoicingView } from "./ReinvoicingView";
 import { PriceListView } from "./PriceListView";
@@ -12,6 +12,7 @@ import { ReceiveMaterialView } from "./ReceiveMaterialView";
 import legendreLogo from "./assets/legendre-logo.png";
 import type { AppRole, PurchaseOrder, ReferenceData } from "./types";
 import { ListPreset, ROLE_LABELS, useEscape } from "./shared";
+import { Avatar, GuideStrip, PageHeader, useGuideHidden } from "./ui";
 import { SetupScreen, FullScreenMessage, PendingAccessScreen, ResetPasswordScreen, LoginScreen } from "./AuthScreens";
 import { AdminPanel, SettingsPanel, StaffAdminView } from "./AdminViews";
 import { Dashboard } from "./DashboardView";
@@ -44,10 +45,59 @@ export type NavItem = {
 };
 
 export const NAV_GROUPS: { title: string; keys: ViewKey[] }[] = [
-  { title: "Compras", keys: ["dashboard", "purchase-orders", "new-po", "receive", "approvals", "price-lists"] },
+  { title: "Compras", keys: ["dashboard", "purchase-orders", "approvals", "receive", "price-lists"] },
   { title: "Controlo", keys: ["accruals", "reinvoicing", "exports"] },
   { title: "Administração", keys: ["suppliers", "projects", "staff", "categories", "settings"] },
 ];
+
+// Cabeçalho de página e guia "Como fazer" de cada ecrã
+export const VIEW_META: Record<ViewKey, { eyebrow: string; subtitle?: string; guide?: string[] }> = {
+  dashboard: {
+    eyebrow: "Compras",
+    guide: ["Ver o que precisa de si", "Abrir a lista já filtrada", "Tratar cada adjudicação"],
+  },
+  "purchase-orders": {
+    eyebrow: "Compras · Adjudicações",
+    subtitle: "Todas as adjudicações das obras a que tem acesso.",
+    guide: ["Filtrar por fase ou obra", "Abrir a adjudicação", "Fazer a próxima ação indicada"],
+  },
+  "new-po": {
+    eyebrow: "Compras · Adjudicações",
+    subtitle: "Quatro passos. O rascunho é guardado à medida que avança.",
+  },
+  approvals: {
+    eyebrow: "Compras",
+    subtitle: "Adjudicações que excedem o limite de quem as pediu e foram submetidas a si.",
+    guide: ["Ler porque chega a si", "Ver os artigos e o valor", "Aprovar, devolver ou rejeitar"],
+  },
+  receive: {
+    eyebrow: "Compras",
+    subtitle: "Registe as guias de transporte à medida que o material chega à obra.",
+    guide: ["Escolher a adjudicação", "Indicar o que veio nesta guia", "Anexar a guia e registar"],
+  },
+  "price-lists": { eyebrow: "Compras", subtitle: "Preços acordados com cada fornecedor, por obra." },
+  accruals: {
+    eyebrow: "Controlo",
+    subtitle: "Material recebido e ainda não faturado, por obra e rubrica.",
+    guide: ["Escolher o mês", "Rever o recebido sem fatura", "Exportar para a contabilidade"],
+  },
+  reinvoicing: { eyebrow: "Controlo", subtitle: "Redébito mensal ao consórcio das obras partilhadas." },
+  exports: { eyebrow: "Controlo", subtitle: "Ficheiros Excel para a contabilidade e para a Orçamentação." },
+  suppliers: { eyebrow: "Administração", subtitle: "Fornecedores disponíveis para todas as obras." },
+  projects: { eyebrow: "Administração", subtitle: "Obras, códigos e dados de entrega por defeito." },
+  staff: { eyebrow: "Administração" },
+  categories: { eyebrow: "Administração", subtitle: "Tipos de despesa e rubricas usados nas linhas das adjudicações." },
+  settings: { eyebrow: "Administração", subtitle: "Dados da empresa que aparecem no documento da adjudicação." },
+};
+
+const WEEKDAY_DATE = new Intl.DateTimeFormat("pt-PT", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+
+function greeting(date: Date) {
+  const hour = date.getHours();
+  if (hour < 13) return "Bom dia";
+  if (hour < 20) return "Boa tarde";
+  return "Boa noite";
+}
 
 export const emptyReferences: ReferenceData = {
   suppliers: [],
@@ -121,7 +171,7 @@ export function ProcurementShell({ session }: { session: Session }) {
   const pushToast = (text: string, kind: "success" | "error" = "success") => {
     const id = Date.now() + Math.random();
     setToasts((prev) => [...prev, { id, text, kind }]);
-    window.setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 3500);
+    window.setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 3200);
   };
 
   useEscape(!!confirmState, () => resolveConfirm(false));
@@ -411,29 +461,72 @@ export function ProcurementShell({ session }: { session: Session }) {
   }
 
   const navItems: NavItem[] = [
-    { key: "dashboard", label: "Dashboard", icon: BarChart3 },
+    { key: "dashboard", label: "Início", icon: LayoutDashboard },
     { key: "purchase-orders", label: "Adjudicações", icon: ClipboardList },
-    { key: "approvals", label: myPendingApprovals.length > 0 ? `Aprovações (${myPendingApprovals.length})` : "Aprovações", icon: CheckCircle2 },
+    { key: "approvals", label: "Aprovações", icon: CheckCircle2 },
+    { key: "receive", label: "Receber material", icon: Truck, disabled: !canWritePo },
+    { key: "price-lists", label: "Preçários", icon: Tags, disabled: !currentStaff?.is_active },
     { key: "accruals", label: "Accruals", icon: TrendingUp },
     { key: "reinvoicing", label: "Refaturação", icon: Repeat, disabled: !canAdmin },
-    { key: "new-po", label: "Nova Adjudicação", icon: FilePlus2, disabled: !canWritePo },
-    { key: "receive", label: "Receber material", icon: Truck, disabled: !canWritePo },
+    { key: "exports", label: "Exportações", icon: Download },
     { key: "suppliers", label: "Fornecedores", icon: Package, disabled: !canManageSuppliers },
-    { key: "price-lists", label: "Preçários", icon: Tags, disabled: !currentStaff?.is_active },
     { key: "projects", label: "Obras", icon: Building2, disabled: !canAdmin },
-    { key: "staff", label: "Equipa", icon: Users, disabled: !currentStaff?.is_active },
+    { key: "staff", label: canAdmin ? "Equipa" : "O meu perfil", icon: Users, disabled: !currentStaff?.is_active },
     { key: "categories", label: "Categorias", icon: Archive, disabled: !canAdmin },
     { key: "settings", label: "Definições", icon: Settings, disabled: !canAdmin },
-    { key: "exports", label: "Exportações", icon: Download },
   ];
+  // Administração só para administradores; quem gere fornecedores vê o grupo "Dados" só com Fornecedores
+  const navGroups = canAdmin
+    ? NAV_GROUPS
+    : [...NAV_GROUPS.slice(0, 2), ...(canManageSuppliers ? [{ title: "Dados", keys: ["suppliers"] as ViewKey[] }] : [])];
+
+  function goTo(key: ViewKey) {
+    if (key === "new-po") setEditingPurchaseOrder(null);
+    if (key === "receive") setReceivePoId(null);
+    if (key === "purchase-orders") setListPreset(null);
+    setView(key);
+    setNavOpen(false);
+  }
+
+  const meta = VIEW_META[view];
+  const [guideHidden, setGuideHidden] = useGuideHidden(view);
+  const firstName = (currentStaff?.full_name ?? "").split(/\s+/)[0] ?? "";
+  const assignedProjects = canAdmin
+    ? references.projects.filter((p) => p.is_active).length
+    : references.projectAccess.filter((pa) => pa.staff_member_id === currentStaff?.id).length;
+  const now = new Date();
+  const pageTitle =
+    view === "dashboard"
+      ? `${greeting(now)}${firstName ? `, ${firstName}` : ""}`
+      : view === "new-po"
+        ? editingPurchaseOrder
+          ? `Editar ${editingPurchaseOrder.po_number}`
+          : "Nova adjudicação"
+        : navItems.find((item) => item.key === view)?.label ?? "";
+  const pageSubtitle =
+    view === "dashboard"
+      ? `${WEEKDAY_DATE.format(now)} · ${assignedProjects} ${assignedProjects === 1 ? "obra atribuída" : "obras atribuídas"}`
+      : view === "staff" && !canAdmin
+        ? "Os seus dados e a assinatura que aparece nas adjudicações."
+        : meta.subtitle;
+  const roleLabel = ROLE_LABELS[role] ?? role;
+  const limitLabel = currentStaff?.authority_limit != null ? `limite ${moneyRound(currentStaff.authority_limit)}` : "sem limite";
 
   return (
     <div className="app-shell">
       <aside className="sidebar">
         <div className="brand-lockup">
           <img className="brand-logo" src={legendreLogo} alt="Legendre" />
-          <span>Sistema de Compras</span>
+          <span className="brand-app"><b>Sistema de Compras</b> · Solive</span>
         </div>
+        {canWritePo && (
+          <div className="sidebar-cta">
+            <button type="button" className={view === "new-po" && !editingPurchaseOrder ? "primary block active" : "primary block"} onClick={() => goTo("new-po")}>
+              <Plus size={18} />
+              Nova adjudicação
+            </button>
+          </div>
+        )}
         <button
           type="button"
           className="secondary nav-toggle"
@@ -442,10 +535,10 @@ export function ProcurementShell({ session }: { session: Session }) {
           aria-label="Menu"
         >
           <Menu size={18} />
-          {navItems.find((item) => item.key === view)?.label ?? "Menu"}
+          {navItems.find((item) => item.key === view)?.label ?? (view === "new-po" ? "Nova adjudicação" : "Menu")}
         </button>
         <nav className={navOpen ? "open" : "collapsed"}>
-          {NAV_GROUPS.map((group) => {
+          {navGroups.map((group) => {
             const items = group.keys
               .map((key) => navItems.find((item) => item.key === key))
               .filter((item): item is NavItem => Boolean(item) && !item?.disabled);
@@ -453,127 +546,88 @@ export function ProcurementShell({ session }: { session: Session }) {
             return (
               <Fragment key={group.title}>
                 <p className="nav-group">{group.title}</p>
-          {items.map((item) => {
-            const Icon = item.icon;
-            return (
-              <button
-                className={view === item.key ? "nav-item active" : "nav-item"}
-                disabled={item.disabled}
-                key={item.key}
-                onClick={() => {
-                  if (item.key === "new-po") setEditingPurchaseOrder(null);
-                  if (item.key === "receive") setReceivePoId(null);
-                  if (item.key === "purchase-orders") setListPreset(null);
-                  setView(item.key);
-                  setNavOpen(false);
-                }}
-                title={item.disabled ? "Acesso de administrador necessário" : item.label}
-              >
-                <Icon size={18} />
-                {item.label}
-              </button>
-            );
-          })}
+                {items.map((item) => {
+                  const Icon = item.icon;
+                  const count = item.key === "approvals" ? myPendingApprovals.length : 0;
+                  return (
+                    <button
+                      className={view === item.key ? "nav-item active" : "nav-item"}
+                      key={item.key}
+                      onClick={() => goTo(item.key)}
+                      aria-current={view === item.key ? "page" : undefined}
+                    >
+                      <Icon size={18} />
+                      <span className="nav-label">{item.label}</span>
+                      {count > 0 && <span className="nav-count" aria-label={`${count} por aprovar`}>{count}</span>}
+                    </button>
+                  );
+                })}
               </Fragment>
             );
           })}
         </nav>
+        <div className="sidebar-footer">
+          <Avatar name={currentStaff?.full_name ?? session.user.email} />
+          <button
+            type="button"
+            className="sidebar-user"
+            onClick={() => currentStaff?.is_active && goTo("staff")}
+            title={canAdmin ? "Equipa" : "O meu perfil"}
+          >
+            <strong>{currentStaff?.full_name ?? session.user.email}</strong>
+            <small>{roleLabel} · {limitLabel}</small>
+          </button>
+          <button className="icon-button ghost" onClick={() => supabase?.auth.signOut()} title="Terminar sessão" aria-label="Terminar sessão">
+            <LogOut size={18} />
+          </button>
+        </div>
       </aside>
 
       <main className="workspace">
-        <header className="topbar">
-          <div>
-            <p className="eyebrow">Compras internas</p>
-            <h1>{navItems.find((item) => item.key === view)?.label}</h1>
-          </div>
-          <div className="user-strip">
-            <div style={{ position: "relative" }}>
-              <button className="icon-button" onClick={openNotices} title="Avisos" aria-label={`Avisos (${unreadNotices} novos)`} aria-expanded={noticesOpen}>
-                <Bell size={18} />
-                {unreadNotices > 0 && (
-                  <span
-                    style={{
-                      position: "absolute",
-                      top: -4,
-                      right: -4,
-                      minWidth: 18,
-                      height: 18,
-                      padding: "0 4px",
-                      borderRadius: 999,
-                      background: "var(--red, #e62336)",
-                      color: "#fff",
-                      fontSize: 11,
-                      fontWeight: 700,
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                    }}
-                  >
-                    {unreadNotices}
-                  </span>
-                )}
-              </button>
-              {noticesOpen && (
-                <div
-                  role="dialog"
-                  aria-label="Avisos"
-                  style={{
-                    position: "absolute",
-                    right: 0,
-                    top: "calc(100% + 8px)",
-                    width: 340,
-                    maxHeight: 420,
-                    overflow: "auto",
-                    background: "#fff",
-                    border: "1px solid var(--line, #e4e6eb)",
-                    borderRadius: 12,
-                    boxShadow: "0 12px 32px rgba(20, 58, 103, 0.14)",
-                    zIndex: 50,
-                    padding: 6,
-                  }}
-                >
-                  {notices.length === 0 && <p className="muted" style={{ padding: 10, margin: 0 }}>Sem avisos.</p>}
-                  {notices.map((n) => (
-                    <button
-                      key={n.id}
-                      type="button"
-                      onClick={() => {
-                        setNoticesOpen(false);
-                        if (n.target === "approvals") setView("approvals");
-                        else setPreviewPurchaseOrder(n.po);
-                      }}
-                      style={{
-                        display: "flex",
-                        flexDirection: "column",
-                        gap: 2,
-                        width: "100%",
-                        textAlign: "left",
-                        background: n.when > lastSeen ? "#f0f6fd" : "transparent",
-                        color: "inherit",
-                        border: "none",
-                        borderRadius: 8,
-                        padding: "8px 10px",
-                        cursor: "pointer",
-                        fontWeight: 400,
-                      }}
-                    >
-                      <span>{n.text}</span>
-                      <small className="muted">{shortDate(n.when)}</small>
-                    </button>
-                  ))}
-                </div>
+        <PageHeader
+          eyebrow={meta.eyebrow}
+          title={pageTitle}
+          subtitle={pageSubtitle}
+          actions={
+            <>
+              {meta.guide && guideHidden && (
+                <button type="button" className="link-button" onClick={() => setGuideHidden(false)}>
+                  Mostrar guia
+                </button>
               )}
-            </div>
-            <span className={`role-pill ${role}`}>{ROLE_LABELS[role] ?? role}</span>
-            <span>{currentStaff?.full_name ?? session.user.email}</span>
-            <button className="icon-button" onClick={refresh} title="Atualizar dados">
-              <RefreshCw size={18} />
-            </button>
-            <button className="icon-button" onClick={() => supabase?.auth.signOut()} title="Terminar sessão">
-              <LogOut size={18} />
-            </button>
-          </div>
-        </header>
+              <div className="notices-anchor">
+                <button className="icon-button" onClick={openNotices} title="Avisos" aria-label={`Avisos (${unreadNotices} novos)`} aria-expanded={noticesOpen}>
+                  <Bell size={18} />
+                  {unreadNotices > 0 && <span className="icon-count">{unreadNotices}</span>}
+                </button>
+                {noticesOpen && (
+                  <div className="notices-popover" role="dialog" aria-label="Avisos">
+                    {notices.length === 0 && <p className="muted notices-empty">Sem avisos.</p>}
+                    {notices.map((n) => (
+                      <button
+                        key={n.id}
+                        type="button"
+                        className={n.when > lastSeen ? "notice-item unread" : "notice-item"}
+                        onClick={() => {
+                          setNoticesOpen(false);
+                          if (n.target === "approvals") setView("approvals");
+                          else setPreviewPurchaseOrder(n.po);
+                        }}
+                      >
+                        <span>{n.text}</span>
+                        <small className="muted">{shortDate(n.when)}</small>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <button className="icon-button" onClick={refresh} title="Atualizar dados" aria-label="Atualizar dados">
+                <RefreshCw size={18} />
+              </button>
+            </>
+          }
+        />
+        {meta.guide && !guideHidden && <GuideStrip steps={meta.guide} onHide={() => setGuideHidden(true)} />}
 
         {error && <div className="notice error">{error}</div>}
         {loading ? (
@@ -814,7 +868,7 @@ export function ProcurementShell({ session }: { session: Session }) {
                 />
               </label>
               <div className="modal-actions">
-                <button className="secondary" onClick={() => setDecision(null)}>Cancelar</button>
+                <button className="ghost" onClick={() => setDecision(null)}>Cancelar</button>
                 <button
                   disabled={decisionComment.trim() === ""}
                   onClick={() => handleDecideApproval(decision.po, decision.action, decisionComment.trim())}
@@ -851,7 +905,7 @@ export function ProcurementShell({ session }: { session: Session }) {
                     </select>
                   </label>
                   <div className="modal-actions">
-                    <button className="secondary" onClick={() => { setApprovalPo(null); setChosenApprover(""); }}>Cancelar</button>
+                    <button className="ghost" onClick={() => { setApprovalPo(null); setChosenApprover(""); }}>Cancelar</button>
                     <button onClick={handleSubmitForApproval} disabled={!chosenApprover}>Enviar para aprovação</button>
                   </div>
                 </>
@@ -862,10 +916,11 @@ export function ProcurementShell({ session }: { session: Session }) {
       </main>
       {confirmState && (
         <div className="modal-overlay" onClick={() => resolveConfirm(false)}>
-          <div className="modal-card" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
+          <div className="modal-card" role="dialog" aria-modal="true" aria-labelledby="confirm-title" onClick={(e) => e.stopPropagation()}>
+            <h3 id="confirm-title">Confirmar</h3>
             <p>{confirmState.text}</p>
             <div className="modal-actions">
-              <button className="secondary" onClick={() => resolveConfirm(false)}>Cancelar</button>
+              <button className="ghost" onClick={() => resolveConfirm(false)}>Cancelar</button>
               <button autoFocus onClick={() => resolveConfirm(true)}>Confirmar</button>
             </div>
           </div>
@@ -874,7 +929,10 @@ export function ProcurementShell({ session }: { session: Session }) {
       {toasts.length > 0 && (
         <div className="toast-stack" aria-live="polite">
           {toasts.map((t) => (
-            <div key={t.id} className={`toast ${t.kind}`}>{t.text}</div>
+            <div key={t.id} className={`toast ${t.kind}`} role="status">
+              {t.kind === "success" ? <CheckCircle2 size={18} aria-hidden="true" /> : <AlertTriangle size={18} aria-hidden="true" />}
+              <span>{t.text}</span>
+            </div>
           ))}
         </div>
       )}
