@@ -2865,3 +2865,51 @@ button:focus-visible,
   .need-tile { border-bottom: 1px solid var(--color-black-15); }
 }
 .section-title-aside { flex: 0 0 auto; white-space: nowrap; }
+
+/* ── Redesenho · Lista de adjudicações ── */
+.header-slot { display: contents; }
+.list-bar { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 14px; }
+.list-bar select { flex: 1 1 150px; max-width: 220px; min-width: 0; width: auto; }
+.list-bar .search-field { flex: 2 1 280px; }
+.search-field { align-items: center; color: var(--color-black-70); display: flex; flex: 1 1 320px; position: relative; }
+.search-field svg { left: 12px; pointer-events: none; position: absolute; }
+.search-field input[type="search"]:not([type="checkbox"]) { padding-left: 36px; width: 100%; }
+.tabs { border-bottom: 1px solid var(--color-black-15); display: flex; gap: 0; margin-bottom: 14px; overflow-x: auto; }
+.tab {
+  background: transparent;
+  border: 0;
+  border-bottom: 4px solid transparent;
+  color: var(--color-black);
+  flex: 0 0 auto;
+  font-size: 14px;
+  font-weight: 400;
+  gap: 6px;
+  margin-bottom: -1px;
+  min-height: 0;
+  padding: 10px 14px 8px;
+  transition: border-color 200ms var(--ease), background-color 120ms var(--ease);
+}
+.tab:hover:not(:disabled) { background: var(--color-black-04); border-color: transparent; border-bottom-color: var(--color-black-15); }
+.tab.active, .tab.active:hover:not(:disabled) { border-bottom-color: var(--color-red); font-weight: 600; background: transparent; }
+.tab-count { color: var(--color-black-70); font-size: 12px; font-weight: 400; }
+.po-table { min-width: 900px; }
+.po-table td { vertical-align: top; }
+.click-row { cursor: pointer; }
+.click-row:focus-visible { outline: 2px solid var(--color-black); outline-offset: -2px; }
+.po-num { font-variant-numeric: tabular-nums; font-weight: 600; white-space: nowrap; }
+.cell-main { display: block; }
+.cell-sub { color: var(--color-black-70); display: block; font-size: 12px; margin-top: 2px; }
+td.num .cell-sub { white-space: nowrap; }
+.phase-cell { max-width: 240px; }
+.phase-note { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.late-date { color: var(--color-red-press); font-weight: 600; }
+.progress { background: var(--color-black-08); display: block; height: 4px; margin-top: 6px; max-width: 120px; }
+.progress i { background: var(--color-black); display: block; height: 100%; }
+.progress i.late { background: var(--color-red); }
+.action-cell { white-space: nowrap; }
+.action-cell .next-text { font-size: 13px; }
+.row-tools { display: inline-flex; gap: 2px; margin-left: 8px; opacity: .55; vertical-align: middle; }
+.click-row:hover .row-tools, .row-tools:focus-within { opacity: 1; }
+.row-tools .icon-button { min-height: 30px; width: 30px; }
+.list-foot { font-size: 12px; margin: 10px 0 0; }
+button.primary.sm, button.outline.sm { gap: 6px; }

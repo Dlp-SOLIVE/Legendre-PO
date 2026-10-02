@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { Archive, BarChart3, Building2, ClipboardList, Download, Plus, LogOut, Package, RefreshCw, Settings, Users, TrendingUp, Repeat, CheckCircle2, Tags, Truck, Bell, Menu, LayoutDashboard, AlertTriangle } from "lucide-react";
-import { createPurchaseOrder, deletePurchaseOrder, deleteRow, loadPurchaseOrders, loadReferenceData, normalizeRole, roleCanAdmin, roleCanWritePo, validatePurchaseOrder, submitForApproval, decideApproval, loadDeliveredByPo, upsertCategory, upsertProject, upsertSetting, upsertSupplier, type PurchaseOrderDraft } from "./lib/data";
+import { createPurchaseOrder, deletePurchaseOrder, deleteRow, loadPurchaseOrders, loadReferenceData, normalizeRole, roleCanAdmin, roleCanWritePo, validatePurchaseOrder, submitForApproval, decideApproval, loadDeliveryTotalsByPo, upsertCategory, upsertProject, upsertSetting, upsertSupplier, type PurchaseOrderDraft } from "./lib/data";
 import { hasSupabaseConfig, supabase } from "./lib/supabase";
 import { onConfirmRequest } from "./lib/dialog";
 import { isoToday, lineNet, money, moneyRound, shortDate } from "./lib/format";
@@ -12,7 +12,7 @@ import { ReceiveMaterialView } from "./ReceiveMaterialView";
 import legendreLogo from "./assets/legendre-logo.png";
 import type { AppRole, PurchaseOrder, ReferenceData } from "./types";
 import { ListPreset, ROLE_LABELS, useEscape } from "./shared";
-import { Avatar, GuideStrip, PageHeader, useGuideHidden } from "./ui";
+import { Avatar, GuideStrip, HeaderSlotContext, PageHeader, useGuideHidden } from "./ui";
 import { SetupScreen, FullScreenMessage, PendingAccessScreen, ResetPasswordScreen, LoginScreen } from "./AuthScreens";
 import { AdminPanel, SettingsPanel, StaffAdminView } from "./AdminViews";
 import { Dashboard } from "./DashboardView";
@@ -194,6 +194,7 @@ export function ProcurementShell({ session }: { session: Session }) {
   useEscape(noticesOpen, () => setNoticesOpen(false));
   const [listPreset, setListPreset] = useState<ListPreset>(null);
   const [delivered, setDelivered] = useState<Record<string, number>>({});
+  const [invoiced, setInvoiced] = useState<Record<string, number>>({});
 
   const currentStaff = useMemo(() => {
     const email = session.user.email?.toLowerCase();
@@ -213,7 +214,15 @@ export function ProcurementShell({ session }: { session: Session }) {
       setReferences(nextRefs);
       setPurchaseOrders(nextPos);
       // valor entregue por adjudicação (coluna "Entregue" e "Entregas em atraso"); se falhar, não bloqueia
-      loadDeliveredByPo().then(setDelivered).catch(() => setDelivered({}));
+      loadDeliveryTotalsByPo()
+        .then((totals) => {
+          setDelivered(totals.delivered);
+          setInvoiced(totals.invoiced);
+        })
+        .catch(() => {
+          setDelivered({});
+          setInvoiced({});
+        });
       return { references: nextRefs, purchaseOrders: nextPos };
     } catch (err) {
       setError(err instanceof Error ? err.message : "Não foi possível carregar os dados.");
@@ -488,6 +497,7 @@ export function ProcurementShell({ session }: { session: Session }) {
     setNavOpen(false);
   }
 
+  const [headerSlot, setHeaderSlot] = useState<HTMLDivElement | null>(null);
   const meta = VIEW_META[view];
   const [guideHidden, setGuideHidden] = useGuideHidden(view);
   const firstName = (currentStaff?.full_name ?? "").split(/\s+/)[0] ?? "";
@@ -590,6 +600,7 @@ export function ProcurementShell({ session }: { session: Session }) {
           subtitle={pageSubtitle}
           actions={
             <>
+              <div className="header-slot" ref={setHeaderSlot} />
               {meta.guide && guideHidden && (
                 <button type="button" className="link-button" onClick={() => setGuideHidden(false)}>
                   Mostrar guia
@@ -629,6 +640,7 @@ export function ProcurementShell({ session }: { session: Session }) {
         />
         {meta.guide && !guideHidden && <GuideStrip steps={meta.guide} onHide={() => setGuideHidden(true)} />}
 
+        <HeaderSlotContext.Provider value={headerSlot}>
         {error && <div className="notice error">{error}</div>}
         {loading ? (
           <FullScreenMessage title="A carregar dados do Supabase" compact />
@@ -670,9 +682,11 @@ export function ProcurementShell({ session }: { session: Session }) {
                 }}
                 onCopy={handleCopyPurchaseOrder}
                 onDelete={handleDeletePurchaseOrder}
-                onPreview={setPreviewPurchaseOrder}
+                onOpen={setPreviewPurchaseOrder}
+                onSend={setPreviewPurchaseOrder}
                 onValidate={handleValidatePurchaseOrder}
                 delivered={delivered}
+                invoiced={invoiced}
                 preset={listPreset}
                 onClearPreset={() => setListPreset(null)}
                 onReceive={(po) => {
@@ -844,6 +858,7 @@ export function ProcurementShell({ session }: { session: Session }) {
             {view === "exports" && <Exports references={references} purchaseOrders={purchaseOrders} />}
           </>
         )}
+        </HeaderSlotContext.Provider>
         {previewPurchaseOrder && (
           <PreviewModal
             po={previewPurchaseOrder}

@@ -1,4 +1,5 @@
-import { useState, type ReactNode } from "react";
+import { createContext, useContext, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { EyeOff } from "lucide-react";
 
 // Componentes partilhados do redesenho (Charte graphique Legendre — "Empreinte 3.0")
@@ -98,4 +99,12 @@ export function Avatar({ name, size = 28 }: { name?: string | null; size?: numbe
       {initials || "?"}
     </span>
   );
+}
+
+// Botões de um ecrã no cabeçalho da página (à direita): o App fornece o "slot", a vista preenche-o
+export const HeaderSlotContext = createContext<HTMLElement | null>(null);
+
+export function HeaderActions({ children }: { children: ReactNode }) {
+  const slot = useContext(HeaderSlotContext);
+  return slot ? createPortal(children, slot) : null;
 }
