@@ -3199,3 +3199,36 @@ label.check input[type="checkbox"] { flex: 0 0 18px; min-height: 0; padding: 0; 
 .accruals-table .total-row td { background: var(--color-black-04); font-weight: 600; }
 .accrual-row:hover > td { background: var(--color-black-04); }
 .accrual-row.open > td, .accrual-detail-row > td { background: var(--color-black-04); }
+
+/* ── Redesenho · Ecrãs sem redesenho (Preçários, Refaturação, Exportações, Administração) ── */
+.work-section { padding: 0 0 18px; }
+.work-section > *:not(.section-heading):not(.table-wrap):not(.admin-split) { margin-left: 18px; margin-right: 18px; }
+.work-section > .table-wrap, .work-section > .admin-split { margin-left: 18px; margin-right: 18px; }
+.work-section > .section-heading {
+  border-bottom: 1px solid var(--color-black-15);
+  justify-content: space-between;
+  margin: 0 0 16px;
+  padding: 14px 18px;
+}
+.work-section > .section-heading h2 {
+  align-items: center;
+  display: flex;
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 600;
+  gap: 10px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.work-section > .section-heading h2::before { background: var(--color-red); content: ""; display: inline-block; flex: 0 0 4px; height: 16px; width: 4px; }
+.work-section > .section-heading .eyebrow { display: none; }
+.accrual-kpis .kpi-card { background: #fff; border: 1px solid var(--color-black-15); border-top: 4px solid var(--color-black-15); }
+.accrual-kpis .kpi-card.accrual { border-top-color: var(--color-red); }
+.accrual-kpis .kpi-card strong { color: var(--color-black); font-family: var(--font-display); }
+.accrual-kpis .kpi-card.accrual strong { color: var(--color-black); }
+.export-button { background: #fff; border: 1px solid var(--color-black-15); color: var(--color-black); }
+.export-button:hover:not(:disabled) { background: var(--color-black-04); border-color: var(--color-black); }
+.export-button svg { color: var(--color-red); }
+.empty-state { color: var(--color-black-70); padding: 28px 16px; text-align: center; }
+.work-section > :first-child:not(.section-heading) { margin-top: 18px; }
+.modal-backdrop .envio-hint { color: #fff; } .modal-backdrop > .modal-shell > .modal-actions { flex-wrap: wrap; }

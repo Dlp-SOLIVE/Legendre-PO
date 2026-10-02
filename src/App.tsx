@@ -186,6 +186,7 @@ export function ProcurementShell({ session }: { session: Session }) {
   const [chosenApprover, setChosenApprover] = useState("");
   const [previewPurchaseOrder, setPreviewPurchaseOrder] = useState<PurchaseOrder | null>(null);
   const [drawerPoId, setDrawerPoId] = useState<string | null>(null); // detalhe (painel lateral)
+  const [reopenDrawerId, setReopenDrawerId] = useState<string | null>(null); // volta ao detalhe ao fechar o PDF
   const [receivePoId, setReceivePoId] = useState<string | null>(null);
   const [decision, setDecision] = useState<{ po: PurchaseOrder; action: "return" | "reject" } | null>(null);
   const [decisionComment, setDecisionComment] = useState("");
@@ -436,7 +437,13 @@ export function ProcurementShell({ session }: { session: Session }) {
     canWrite: canWritePo,
     onValidate: handleValidatePurchaseOrder,
     onEdit: (po) => void handleEditPurchaseOrder(po),
-    onSend: setPreviewPurchaseOrder,
+    onSend: (po) => {
+      if (drawerPoId) {
+        setReopenDrawerId(drawerPoId);
+        setDrawerPoId(null);
+      }
+      setPreviewPurchaseOrder(po);
+    },
     onReceive: (po) => {
       setDrawerPoId(null);
       setReceivePoId(po.id);
@@ -641,7 +648,7 @@ export function ProcurementShell({ session }: { session: Session }) {
 
       <main className="workspace">
         <PageHeader
-          eyebrow={meta.eyebrow}
+          eyebrow={view === "staff" && !canAdmin ? "A minha conta" : meta.eyebrow}
           title={pageTitle}
           subtitle={pageSubtitle}
           actions={
@@ -866,7 +873,11 @@ export function ProcurementShell({ session }: { session: Session }) {
               currentStaffId={currentStaff?.id ?? null}
               handlers={nextActionHandlers}
               onClose={() => setDrawerPoId(null)}
-              onPdf={setPreviewPurchaseOrder}
+              onPdf={(item) => {
+                setDrawerPoId(null);
+                setReopenDrawerId(item.id);
+                setPreviewPurchaseOrder(item);
+              }}
               onCopy={(item) => {
                 setDrawerPoId(null);
                 void handleCopyPurchaseOrder(item);
@@ -881,7 +892,11 @@ export function ProcurementShell({ session }: { session: Session }) {
           <PreviewModal
             po={previewPurchaseOrder}
             settings={references.settings}
-            onClose={() => setPreviewPurchaseOrder(null)}
+            onClose={() => {
+              setPreviewPurchaseOrder(null);
+              if (reopenDrawerId) setDrawerPoId(reopenDrawerId);
+              setReopenDrawerId(null);
+            }}
             canWrite={canWritePo}
             currentStaff={currentStaff}
             onRefresh={refresh}
