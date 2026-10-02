@@ -4,6 +4,7 @@ import { downloadCsv } from "./lib/csv";
 import { lineNet } from "./lib/format";
 import type { PurchaseOrder, ReferenceData } from "./types";
 import { statuses, statusLabel } from "./shared";
+import { exportarPrecosAdjudicados, PRECOS_FICHEIRO } from "./lib/precosAdjudicados";
 
 export function Exports({ references, purchaseOrders: allPurchaseOrders }: { references: ReferenceData; purchaseOrders: PurchaseOrder[] }) {
   const [projectId, setProjectId] = useState("");
@@ -112,6 +113,16 @@ export function Exports({ references, purchaseOrders: allPurchaseOrders }: { ref
             ]),
           ),
         ),
+    },
+    {
+      label: "Preços adjudicados para a Orçamentação (.xlsx · só validadas)",
+      filename: PRECOS_FICHEIRO,
+      action: () => {
+        exportarPrecosAdjudicados(purchaseOrders).catch((erro: unknown) => {
+          console.error(erro);
+          window.alert("Não foi possível gerar o ficheiro de preços adjudicados.");
+        });
+      },
     },
   ];
 
