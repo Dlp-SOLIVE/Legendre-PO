@@ -2790,3 +2790,78 @@ button:focus-visible,
 @media print {
   .page-header, .guide-strip, .toast-stack, .drawer, .drawer-backdrop { display: none !important; }
 }
+
+/* ── Redesenho · Início ── */
+.dash { display: grid; gap: 20px; }
+.needs-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+.need-tile {
+  align-items: flex-start;
+  background: #fff;
+  border: 0;
+  border-right: 1px solid var(--color-black-15);
+  border-top: 4px solid var(--color-black-15);
+  color: var(--color-black);
+  display: flex;
+  flex-direction: column;
+  font-weight: 400;
+  gap: 4px;
+  justify-content: flex-start;
+  min-height: 132px;
+  padding: 16px 18px;
+  text-align: left;
+}
+.need-tile:last-child { border-right: 0; }
+.need-tile.has { border-top-color: var(--color-red); }
+.need-tile:hover:not(:disabled) { background: var(--color-black-04); border-color: var(--color-black-15); border-top-color: var(--color-black-15); }
+.need-tile.has:hover:not(:disabled) { border-top-color: var(--color-red); }
+.need-label { font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; }
+.need-count { color: var(--color-black-50); font-family: var(--font-display); font-size: 36px; font-variant-numeric: tabular-nums; font-weight: 600; line-height: 1.1; }
+.need-tile.has .need-count { color: var(--color-black); }
+.need-desc { color: var(--color-black-70); font-size: 12px; line-height: 1.4; }
+.need-cta { font-size: 12px; font-weight: 600; margin-top: auto; padding-top: 6px; }
+.dash-cols { align-items: flex-start; display: flex; flex-wrap: wrap; gap: 20px; }
+.dash-main { flex: 2 1 480px; min-width: 0; }
+.dash-side { flex: 1 1 280px; max-width: 420px; }
+.row-list { list-style: none; margin: 0; padding: 0; }
+.row-list li + li { border-top: 1px solid var(--color-black-08); }
+.row-button {
+  align-items: center;
+  background: #fff;
+  border: 0;
+  color: var(--color-black);
+  display: grid;
+  font-weight: 400;
+  gap: 12px;
+  grid-template-columns: minmax(96px, auto) minmax(0, 1fr) auto minmax(96px, auto);
+  justify-content: stretch;
+  min-height: 0;
+  padding: 11px 18px;
+  text-align: left;
+  width: 100%;
+}
+.row-button:hover:not(:disabled) { background: var(--color-black-04); border: 0; }
+.row-num { font-variant-numeric: tabular-nums; font-weight: 600; white-space: nowrap; }
+.row-main { display: flex; flex-direction: column; min-width: 0; }
+.row-main > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row-main small { font-size: 12px; }
+.row-value { font-weight: 600; text-align: right; }
+.kv-stack { display: grid; gap: 0; margin: 0 0 18px; }
+.kv-stack > div { align-items: baseline; border-bottom: 1px solid var(--color-black-08); display: flex; justify-content: space-between; padding: 9px 0; }
+.kv-stack dt { color: var(--color-black-70); font-size: 13px; }
+.kv-stack dd { font-family: var(--font-display); font-size: 20px; font-variant-numeric: tabular-nums; font-weight: 600; margin: 0; }
+.mini-title { color: var(--color-black-70); font-size: 11px; font-weight: 600; letter-spacing: .08em; margin: 0 0 10px; text-transform: uppercase; }
+.mini-bars { display: grid; gap: 12px; }
+.mini-bar-head { display: flex; font-size: 13px; justify-content: space-between; margin-bottom: 5px; gap: 8px; }
+.mini-bar-head strong { font-weight: 600; }
+.cost-analysis > summary { cursor: pointer; font-size: 13px; font-weight: 600; letter-spacing: .08em; padding: 14px 18px; text-transform: uppercase; }
+.cost-analysis[open] > summary { border-bottom: 1px solid var(--color-black-15); }
+@media (max-width: 720px) {
+  .row-button { grid-template-areas: "num badge" "main value"; grid-template-columns: minmax(0, 1fr) auto; row-gap: 4px; }
+  .row-button .row-num { grid-area: num; }
+  .row-button .badge { grid-area: badge; justify-self: end; }
+  .row-button .row-main { grid-area: main; }
+  .row-button .row-value { grid-area: value; align-self: end; }
+  .guide-arrow { display: none; }
+  .need-tile { border-bottom: 1px solid var(--color-black-15); }
+}
+.section-title-aside { flex: 0 0 auto; white-space: nowrap; }

@@ -642,10 +642,14 @@ export function ProcurementShell({ session }: { session: Session }) {
                 references={references}
                 currentStaff={currentStaff}
                 delivered={delivered}
+                pendingApprovals={myPendingApprovals.length}
                 onOpenPreset={(preset) => {
                   setListPreset(preset);
                   setView("purchase-orders");
                 }}
+                onOpenApprovals={() => setView("approvals")}
+                onOpenList={() => goTo("purchase-orders")}
+                onOpenPo={setPreviewPurchaseOrder}
               />
             )}
             {view === "purchase-orders" && (
