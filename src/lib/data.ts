@@ -441,25 +441,32 @@ export async function loadReconciliation(purchaseOrderId: string) {
   return data ?? [];
 }
 
-// Valor entregue (ao preço da adjudicação) por adjudicação, para a coluna "Entregue" da lista.
+// Valor entregue (ao preço da adjudicação) e valor faturado por adjudicação — fase "Em entrega/Entregue/Faturada".
 // Lê em páginas de 1000 linhas (limite por pedido do Supabase).
-export async function loadDeliveredByPo(): Promise<Record<string, number>> {
+export async function loadDeliveryTotalsByPo(): Promise<{ delivered: Record<string, number>; invoiced: Record<string, number> }> {
   const client = requireClient();
-  const out: Record<string, number> = {};
+  const delivered: Record<string, number> = {};
+  const invoiced: Record<string, number> = {};
   const pageSize = 1000;
   for (let from = 0; from < 50000; from += pageSize) {
     const { data, error } = await client
       .from("v_line_reconciliation")
-      .select("purchase_order_id, value_received")
+      .select("purchase_order_id, value_received, value_invoiced")
       .range(from, from + pageSize - 1);
     if (error) throw error;
-    const rows = (data ?? []) as { purchase_order_id: string; value_received: number | null }[];
+    const rows = (data ?? []) as { purchase_order_id: string; value_received: number | null; value_invoiced: number | null }[];
     rows.forEach((row) => {
-      out[row.purchase_order_id] = (out[row.purchase_order_id] ?? 0) + Number(row.value_received ?? 0);
+      delivered[row.purchase_order_id] = (delivered[row.purchase_order_id] ?? 0) + Number(row.value_received ?? 0);
+      invoiced[row.purchase_order_id] = (invoiced[row.purchase_order_id] ?? 0) + Number(row.value_invoiced ?? 0);
     });
     if (rows.length < pageSize) break;
   }
-  return out;
+  return { delivered, invoiced };
+}
+
+// Valor entregue por adjudicação (coluna "Entregue" e "Entregas em atraso")
+export async function loadDeliveredByPo(): Promise<Record<string, number>> {
+  return (await loadDeliveryTotalsByPo()).delivered;
 }
 
 export async function loadAccrualsByProjectMonth() {
