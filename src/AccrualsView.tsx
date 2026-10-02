@@ -1,8 +1,9 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
-import { loadAccrualsByProjectMonth } from "./lib/data";
+import { Download } from "lucide-react";
+import { loadAccrualsByProjectMonth, loadPriceDivergences } from "./lib/data";
 import { supabase } from "./lib/supabase";
 import { money } from "./lib/format";
-import { downloadCsv } from "./lib/csv";
+import { HeaderActions } from "./ui";
 import type { AccrualByProjectMonth } from "./types";
 
 const MONTH_NAMES = [
@@ -55,6 +56,12 @@ export function AccrualsView() {
   const [detailLoading, setDetailLoading] = useState<string | null>(null);
   const [detailError, setDetailError] = useState<string | null>(null);
 
+  const [divergent, setDivergent] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    loadPriceDivergences().then(setDivergent).catch(() => setDivergent(new Set()));
+  }, []);
+  const isDivergent = (r: AccrualRow) => divergent.has(`${r.project_id}__${r.category_id ?? "none"}`);
+
   useEffect(() => {
     (async () => {
       setLoading(true);
@@ -106,26 +113,16 @@ export function AccrualsView() {
   const totalInvoiced = filtered.reduce((s, r) => s + Number(r.value_invoiced ?? 0), 0);
   const totalAccrual = filtered.reduce((s, r) => s + Number(r.accrual_value ?? 0), 0);
 
-  // ordenar por obra e mês para mostrar subtotais por obra × mês
+  // ordenar por obra e mês (a obra só aparece na 1.ª linha de cada grupo)
   const ordered = [...filtered].sort(
     (x, y) => x.project_name.localeCompare(y.project_name, "pt") || y.month.localeCompare(x.month),
   );
-  const groupKey = (r: AccrualRow) => `${r.project_id}__${r.month}`;
-  const groupTotals = new Map<string, { n: number; received: number; invoiced: number; accrual: number }>();
-  ordered.forEach((r) => {
-    const g = groupTotals.get(groupKey(r)) ?? { n: 0, received: 0, invoiced: 0, accrual: 0 };
-    g.n += 1;
-    g.received += Number(r.value_received ?? 0);
-    g.invoiced += Number(r.value_invoiced ?? 0);
-    g.accrual += Number(r.accrual_value ?? 0);
-    groupTotals.set(groupKey(r), g);
-  });
 
-  function exportCsv() {
-    downloadCsv(
-      `accruals${monthFilter ? "-" + monthFilter : ""}.csv`,
-      ["Obra", "Mês", "Tipo de despesa", "Código", "Rubrica", "Entregue", "Faturado", "Accrual"],
-      ordered.map((r) => [
+  async function exportExcel() {
+    const XLSX = await import("xlsx");
+    const sheet = XLSX.utils.aoa_to_sheet([
+      ["Obra", "Mês", "Tipo de despesa", "Código", "Rubrica", "Recebido", "Faturado", "Accrual", "Preço faturado ≠ adjudicado"],
+      ...ordered.map((r) => [
         r.project_name,
         monthLabel(r.month),
         r.expense_type ?? "",
@@ -134,8 +131,12 @@ export function AccrualsView() {
         Number(r.value_received ?? 0),
         Number(r.value_invoiced ?? 0),
         Number(r.accrual_value ?? 0),
+        isDivergent(r) ? "Sim" : "",
       ]),
-    );
+    ]);
+    const book = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(book, sheet, "Accruals");
+    XLSX.writeFile(book, `accruals${monthFilter ? "-" + monthFilter.slice(0, 7) : ""}.xlsx`);
   }
 
   async function toggleDetail(r: AccrualRow) {
@@ -169,83 +170,90 @@ export function AccrualsView() {
     }
   }
 
+  const recentMonths = months.slice(0, 3);
+  const divergentCount = new Set(filtered.filter(isDivergent).map((r) => `${r.project_id}__${r.category_id ?? "none"}`)).size;
+  const showMonthCol = !monthFilter;
+  const colCount = showMonthCol ? 7 : 6;
+
   return (
-    <section className="work-section">
-      <div className="section-heading">
-        <h2>Accruals por obra e mês</h2>
-        <button type="button" className="secondary" onClick={exportCsv} disabled={filtered.length === 0}>
-          Exportar (Excel)
+    <section className="accruals">
+      <HeaderActions>
+        <button type="button" className="outline sm" onClick={() => void exportExcel()} disabled={filtered.length === 0}>
+          <Download size={16} /> Exportar Excel
         </button>
-      </div>
-      <p className="muted">
-        Custo entregue mas ainda não faturado, por obra, mês e rubrica. Valores ao preço da adjudicação.
-        Clica numa linha (ou Enter) para ver os artigos que a compõem.
-      </p>
+      </HeaderActions>
 
-      <div className="accrual-filters">
-        <label>
-          Obra
-          <select value={projectFilter} onChange={(e) => setProjectFilter(e.target.value)}>
-            <option value="">Todas as obras</option>
-            {projects.map(([id, name]) => (
-              <option key={id} value={id}>{name}</option>
-            ))}
-          </select>
-        </label>
+      <div className="tabs month-tabs" role="tablist" aria-label="Mês">
+        {recentMonths.map((m) => (
+          <button key={m} type="button" role="tab" aria-selected={monthFilter === m} className={monthFilter === m ? "tab active" : "tab"} onClick={() => setMonthFilter(m)}>
+            {monthLabel(m).replace(/^./, (c) => c.toUpperCase())}
+          </button>
+        ))}
+        <select
+          className={!monthFilter || !recentMonths.includes(monthFilter) ? "month-select active" : "month-select"}
+          value={recentMonths.includes(monthFilter) ? "__recent__" : monthFilter}
+          onChange={(e) => e.target.value !== "__recent__" && setMonthFilter(e.target.value)}
+          aria-label="Outro mês"
+        >
+          {recentMonths.includes(monthFilter) && <option value="__recent__">Outro mês…</option>}
+          <option value="">Todos os meses</option>
+          {months.map((m) => (
+            <option key={m} value={m}>{monthLabel(m)}</option>
+          ))}
+        </select>
+      </div>
+
+      <div className="list-bar">
+        <select value={projectFilter} onChange={(e) => setProjectFilter(e.target.value)} aria-label="Obra">
+          <option value="">Todas as obras</option>
+          {projects.map(([id, name]) => (
+            <option key={id} value={id}>{name}</option>
+          ))}
+        </select>
         {expenseTypes.length > 0 && (
-          <label>
-            Tipo de despesa
-            <select
-              value={typeFilter}
-              onChange={(e) => { setTypeFilter(e.target.value); setSubFilter(""); }}
-            >
-              <option value="">Todos os tipos</option>
-              {expenseTypes.map((t) => (
-                <option key={t} value={t}>{t}</option>
-              ))}
-            </select>
-          </label>
+          <select value={typeFilter} onChange={(e) => { setTypeFilter(e.target.value); setSubFilter(""); }} aria-label="Tipo de despesa">
+            <option value="">Todos os tipos de despesa</option>
+            {expenseTypes.map((t) => (
+              <option key={t} value={t}>{t}</option>
+            ))}
+          </select>
         )}
-        <label>
-          Subcategoria (rubrica)
-          <select value={subFilter} onChange={(e) => setSubFilter(e.target.value)}>
-            <option value="">Todas as subcategorias</option>
-            {subcategorias.map(([id, label]) => (
-              <option key={id} value={id}>{label}</option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Mês
-          <select value={monthFilter} onChange={(e) => setMonthFilter(e.target.value)}>
-            <option value="">Todos os meses</option>
-            {months.map((m) => (
-              <option key={m} value={m}>{monthLabel(m)}</option>
-            ))}
-          </select>
-        </label>
+        <select value={subFilter} onChange={(e) => setSubFilter(e.target.value)} aria-label="Rubrica">
+          <option value="">Todas as rubricas</option>
+          {subcategorias.map(([id, label]) => (
+            <option key={id} value={id}>{label}</option>
+          ))}
+        </select>
       </div>
 
-      {error && <p className="notice">{error}</p>}
+      {error && <p className="notice error">{error}</p>}
       {loading ? (
         <p className="muted">A carregar…</p>
       ) : (
         <>
-          <div className="accrual-kpis">
-            <div className="kpi-card"><span>Entregue</span><strong>{money(totalReceived)}</strong></div>
-            <div className="kpi-card"><span>Faturado</span><strong>{money(totalInvoiced)}</strong></div>
-            <div className="kpi-card accrual"><span>Accrual</span><strong>{money(totalAccrual)}</strong></div>
+          <div className="kpi-row">
+            <div className="kpi-box"><span>Recebido em obra</span><strong>{money(totalReceived)}</strong></div>
+            <div className="kpi-box"><span>Faturado</span><strong>{money(totalInvoiced)}</strong></div>
+            <div className="kpi-box accent">
+              <span>Accrual a lançar</span>
+              <strong>{money(totalAccrual)}</strong>
+              <small>
+                {divergentCount > 0
+                  ? `${divergentCount} ${divergentCount === 1 ? "rubrica" : "rubricas"} com preço faturado diferente`
+                  : "Sem divergências de preço"}
+              </small>
+            </div>
           </div>
 
           <div className="table-wrap">
-            <table className="recon-table">
+            <table className="accruals-table">
               <thead>
                 <tr>
                   <th>Obra</th>
-                  <th>Mês</th>
-                  <th>Código</th>
+                  {showMonthCol && <th>Mês</th>}
+                  <th>Tipo de despesa</th>
                   <th>Rubrica</th>
-                  <th className="num">Entregue</th>
+                  <th className="num">Recebido</th>
                   <th className="num">Faturado</th>
                   <th className="num">Accrual</th>
                 </tr>
@@ -255,10 +263,12 @@ export function AccrualsView() {
                   const key = detailKey(r.project_id, r.month, r.category_id ?? null);
                   const isOpen = expanded === key;
                   const detail = detailCache[key] ?? [];
+                  const prev = ordered[i - 1];
+                  const firstOfGroup = !prev || prev.project_id !== r.project_id || (showMonthCol && prev.month !== r.month);
                   return (
                     <Fragment key={`${key}-${i}`}>
                       <tr
-                        className={`accrual-row${isOpen ? " open" : ""}`}
+                        className={`accrual-row${isOpen ? " open" : ""}${firstOfGroup && i > 0 ? " group-start" : ""}`}
                         role="button"
                         tabIndex={0}
                         aria-expanded={isOpen}
@@ -270,32 +280,35 @@ export function AccrualsView() {
                           }
                         }}
                       >
-                        <td>{isOpen ? "▾ " : "▸ "}{r.project_name}</td>
-                        <td>{monthLabel(r.month)}</td>
-                        <td>{r.category_code ?? "—"}</td>
-                        <td>{r.category_name ?? "(sem categoria)"}</td>
+                        <td className="obra-cell">{firstOfGroup ? r.project_name : ""}</td>
+                        {showMonthCol && <td>{firstOfGroup ? monthLabel(r.month) : ""}</td>}
+                        <td>{r.expense_type ?? "—"}</td>
+                        <td>
+                          <span className="chev" aria-hidden="true">{isOpen ? "▾" : "▸"}</span> {subLabel(r)}
+                          {isDivergent(r) && <span className="tag-alert">Preço faturado ≠ adjudicado</span>}
+                        </td>
                         <td className="num">{money(r.value_received)}</td>
                         <td className="num">{money(r.value_invoiced)}</td>
-                        <td className="num accrual">{money(r.accrual_value)}</td>
+                        <td className="num accrual"><strong>{money(r.accrual_value)}</strong></td>
                       </tr>
                       {isOpen && detailLoading === key && (
                         <tr className="accrual-detail-row">
-                          <td colSpan={7} className="muted">A carregar artigos…</td>
+                          <td colSpan={colCount} className="muted">A carregar artigos…</td>
                         </tr>
                       )}
                       {isOpen && detailLoading !== key && detailError && (
                         <tr className="accrual-detail-row">
-                          <td colSpan={7} className="notice">{detailError}</td>
+                          <td colSpan={colCount} className="notice">{detailError}</td>
                         </tr>
                       )}
                       {isOpen && detailLoading !== key && !detailError && detail.length === 0 && (
                         <tr className="accrual-detail-row">
-                          <td colSpan={7} className="muted">Sem artigos para esta rubrica/mês.</td>
+                          <td colSpan={colCount} className="muted">Sem artigos para esta rubrica/mês.</td>
                         </tr>
                       )}
                       {isOpen && detailLoading !== key && !detailError && detail.map((d) => (
                         <tr key={d.line_item_id} className="accrual-detail-row">
-                          <td className="accrual-artigo" colSpan={4}>
+                          <td className="accrual-artigo" colSpan={colCount - 3}>
                             ↳ {[d.item_ref, d.artigo_descricao].filter(Boolean).join(" · ") || "—"}
                           </td>
                           <td className="num">{money(Number(d.value_received ?? 0))}</td>
@@ -303,38 +316,28 @@ export function AccrualsView() {
                           <td className="num accrual">{money(Number(d.accrual_value ?? 0))}</td>
                         </tr>
                       ))}
-                      {(() => {
-                        const g = groupTotals.get(groupKey(r));
-                        const next = ordered[i + 1];
-                        if (!g || g.n < 2 || (next && groupKey(next) === groupKey(r))) return null;
-                        return (
-                          <tr className="accrual-subtotal">
-                            <td colSpan={4}><strong>Subtotal {r.project_name} · {monthLabel(r.month)}</strong></td>
-                            <td className="num"><strong>{money(g.received)}</strong></td>
-                            <td className="num"><strong>{money(g.invoiced)}</strong></td>
-                            <td className="num accrual"><strong>{money(g.accrual)}</strong></td>
-                          </tr>
-                        );
-                      })()}
                     </Fragment>
                   );
                 })}
                 {filtered.length === 0 && (
-                  <tr><td colSpan={7} className="muted">Sem movimentos para os filtros selecionados.</td></tr>
+                  <tr><td colSpan={colCount} className="muted">Sem movimentos para os filtros selecionados.</td></tr>
                 )}
               </tbody>
               {filtered.length > 0 && (
                 <tfoot>
-                  <tr>
-                    <td colSpan={4}><strong>Total</strong></td>
-                    <td className="num"><strong>{money(totalReceived)}</strong></td>
-                    <td className="num"><strong>{money(totalInvoiced)}</strong></td>
-                    <td className="num accrual"><strong>{money(totalAccrual)}</strong></td>
+                  <tr className="total-row">
+                    <td colSpan={colCount - 3}>Total</td>
+                    <td className="num">{money(totalReceived)}</td>
+                    <td className="num">{money(totalInvoiced)}</td>
+                    <td className="num accrual">{money(totalAccrual)}</td>
                   </tr>
                 </tfoot>
               )}
             </table>
           </div>
+          <p className="muted list-foot">
+            Accrual = material recebido em obra (guias registadas) ainda sem fatura do fornecedor. Valores líquidos. Clique numa linha para ver os artigos.
+          </p>
         </>
       )}
     </section>

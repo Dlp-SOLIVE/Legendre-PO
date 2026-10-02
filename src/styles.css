@@ -3179,3 +3179,23 @@ label.check input[type="checkbox"] { flex: 0 0 18px; min-height: 0; padding: 0; 
 .drop-zone.has { border-style: solid; border-color: var(--color-black-15); min-height: 0; }
 .drop-zone img { max-height: 240px; max-width: 100%; object-fit: contain; }
 @media (max-width: 800px) { .receive-list { max-width: none; } }
+
+/* ── Redesenho · Accruals ── */
+.month-tabs { align-items: flex-end; }
+.month-select { border: 0 !important; border-bottom: 4px solid transparent !important; flex: 0 0 auto; margin-bottom: -1px; min-height: 0 !important; padding: 10px 28px 8px 14px !important; width: auto; background-color: transparent !important; }
+.month-select.active { border-bottom-color: var(--color-red) !important; font-weight: 600; }
+.kpi-row { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); margin-bottom: 16px; }
+.kpi-box { background: #fff; border: 1px solid var(--color-black-15); border-top: 4px solid var(--color-black-15); display: flex; flex-direction: column; gap: 4px; padding: 14px 18px; }
+.kpi-box.accent { border-top-color: var(--color-red); }
+.kpi-box span { color: var(--color-black-70); font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; }
+.kpi-box strong { font-family: var(--font-display); font-size: 28px; font-variant-numeric: tabular-nums; font-weight: 600; }
+.kpi-box small { color: var(--color-black-70); font-size: 12px; }
+.accruals-table { min-width: 760px; }
+.accruals-table .obra-cell { font-weight: 600; }
+.accruals-table tr.group-start > td { border-top: 1px solid var(--color-black-15); }
+.accruals-table .chev { color: var(--color-black-50); font-size: 11px; }
+.tag-alert { color: var(--color-red-press); display: block; font-size: 11px; font-weight: 600; letter-spacing: .06em; margin-top: 3px; text-transform: uppercase; }
+.accruals-table td.accrual { color: var(--color-black); }
+.accruals-table .total-row td { background: var(--color-black-04); font-weight: 600; }
+.accrual-row:hover > td { background: var(--color-black-04); }
+.accrual-row.open > td, .accrual-detail-row > td { background: var(--color-black-04); }
