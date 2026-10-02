@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Copy, Download, Eye, Pencil, Search, Trash2 } from "lucide-react";
+import { Download, Search } from "lucide-react";
 import { isoToday, money, shortDate } from "./lib/format";
 import type { PurchaseOrder, ReferenceData, StaffMember } from "./types";
 import { ListPreset, useSessionState, poPhase, PHASE_META, deliveredPct, type PoPhase } from "./shared";
@@ -31,8 +31,6 @@ export function PurchaseOrders({
   purchaseOrders,
   references,
   canWrite,
-  onCopy,
-  onDelete,
   onEdit,
   onOpen,
   onSend,
@@ -52,8 +50,6 @@ export function PurchaseOrders({
   preset: ListPreset;
   onClearPreset: () => void;
   onReceive: (po: PurchaseOrder) => void;
-  onCopy: (po: PurchaseOrder) => void;
-  onDelete: (po: PurchaseOrder) => void;
   onEdit: (po: PurchaseOrder) => void;
   onOpen: (po: PurchaseOrder) => void;
   onSend: (po: PurchaseOrder) => void;
@@ -277,7 +273,6 @@ export function PurchaseOrders({
               const note = phaseNote(po, phase, references.staff);
               const late = phase === "atraso";
               const pct = Math.min(1, deliveredPct(po, delivered));
-              const canDeleteDraft = canWrite && po.status === "draft" && po.requester_id === currentStaff?.id;
               return (
                 <tr
                   key={po.id}
@@ -318,20 +313,6 @@ export function PurchaseOrders({
                   </td>
                   <td className="action-cell" onClick={(event) => event.stopPropagation()}>
                     <NextAction po={po} phase={phase} handlers={handlers} invoiced={isInvoiced(po, invoiced)} />
-                    <span className="row-tools">
-                      <button className="icon-button ghost" onClick={() => onOpen(po)} title="Ver detalhe" aria-label="Ver detalhe">
-                        <Eye size={16} />
-                      </button>
-                      <button className="icon-button ghost" disabled={!canWrite || (po.status !== "draft" && po.status !== "validated")} onClick={() => onEdit(po)} title="Editar" aria-label="Editar adjudicação">
-                        <Pencil size={16} />
-                      </button>
-                      <button className="icon-button ghost" disabled={!canWrite} onClick={() => onCopy(po)} title="Copiar para novo rascunho" aria-label="Copiar para novo rascunho">
-                        <Copy size={16} />
-                      </button>
-                      <button className="icon-button ghost danger" disabled={!canDeleteDraft} onClick={() => onDelete(po)} aria-label="Eliminar rascunho" title={canDeleteDraft ? "Eliminar rascunho" : "Só quem criou pode eliminar um rascunho"}>
-                        <Trash2 size={16} />
-                      </button>
-                    </span>
                   </td>
                 </tr>
               );

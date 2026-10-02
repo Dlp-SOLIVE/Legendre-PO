@@ -19,6 +19,9 @@ import { Dashboard } from "./DashboardView";
 import { PurchaseOrders } from "./PurchaseOrdersView";
 import { POForm } from "./POFormView";
 import { PreviewModal } from "./PreviewModal";
+import { PoDrawer } from "./PoDrawer";
+import { isInvoiced, type NextActionHandlers } from "./poActions";
+import { poPhase } from "./shared";
 import { Exports } from "./ExportsView";
 
 export type ViewKey =
@@ -181,6 +184,7 @@ export function ProcurementShell({ session }: { session: Session }) {
   });
   const [chosenApprover, setChosenApprover] = useState("");
   const [previewPurchaseOrder, setPreviewPurchaseOrder] = useState<PurchaseOrder | null>(null);
+  const [drawerPoId, setDrawerPoId] = useState<string | null>(null); // detalhe (painel lateral)
   const [receivePoId, setReceivePoId] = useState<string | null>(null);
   const [decision, setDecision] = useState<{ po: PurchaseOrder; action: "return" | "reject" } | null>(null);
   const [decisionComment, setDecisionComment] = useState("");
@@ -397,6 +401,34 @@ export function ProcurementShell({ session }: { session: Session }) {
       setError(err instanceof Error ? err.message : "Não foi possível copiar a adjudicação.");
     }
   }
+
+  async function handleEditPurchaseOrder(po: PurchaseOrder) {
+    if (po.status === "validated") {
+      const ok = await askConfirm(
+        `A adjudicação ${po.po_number} já está validada. Ao guardar, é criada uma nova revisão (a versão atual fica no histórico) e terá de a reenviar ao fornecedor. Linhas com guias ou faturas registadas não podem ser removidas. Continuar?`,
+      );
+      if (!ok) return;
+    }
+    setDrawerPoId(null);
+    setEditingPurchaseOrder(po);
+    setView("new-po");
+  }
+
+  function openDetail(po: PurchaseOrder) {
+    setDrawerPoId(po.id);
+  }
+
+  const nextActionHandlers: NextActionHandlers = {
+    canWrite: canWritePo,
+    onValidate: handleValidatePurchaseOrder,
+    onEdit: (po) => void handleEditPurchaseOrder(po),
+    onSend: setPreviewPurchaseOrder,
+    onReceive: (po) => {
+      setDrawerPoId(null);
+      setReceivePoId(po.id);
+      setView("receive");
+    },
+  };
 
   useEffect(() => {
     refresh();
@@ -622,7 +654,7 @@ export function ProcurementShell({ session }: { session: Session }) {
                         onClick={() => {
                           setNoticesOpen(false);
                           if (n.target === "approvals") setView("approvals");
-                          else setPreviewPurchaseOrder(n.po);
+                          else openDetail(n.po);
                         }}
                       >
                         <span>{n.text}</span>
@@ -661,7 +693,7 @@ export function ProcurementShell({ session }: { session: Session }) {
                 }}
                 onOpenApprovals={() => setView("approvals")}
                 onOpenList={() => goTo("purchase-orders")}
-                onOpenPo={setPreviewPurchaseOrder}
+                onOpenPo={openDetail}
               />
             )}
             {view === "purchase-orders" && (
@@ -670,19 +702,8 @@ export function ProcurementShell({ session }: { session: Session }) {
                 currentStaff={currentStaff}
                 purchaseOrders={purchaseOrders}
                 references={references}
-                onEdit={async (po) => {
-                  if (po.status === "validated") {
-                    const ok = await askConfirm(
-                      `A adjudicação ${po.po_number} já está validada. Ao guardar, é criada uma nova revisão (a versão atual fica no histórico) e terá de a reenviar ao fornecedor. Linhas com guias ou faturas registadas não podem ser removidas. Continuar?`,
-                    );
-                    if (!ok) return;
-                  }
-                  setEditingPurchaseOrder(po);
-                  setView("new-po");
-                }}
-                onCopy={handleCopyPurchaseOrder}
-                onDelete={handleDeletePurchaseOrder}
-                onOpen={setPreviewPurchaseOrder}
+                onEdit={handleEditPurchaseOrder}
+                onOpen={openDetail}
                 onSend={setPreviewPurchaseOrder}
                 onValidate={handleValidatePurchaseOrder}
                 delivered={delivered}
@@ -859,6 +880,32 @@ export function ProcurementShell({ session }: { session: Session }) {
           </>
         )}
         </HeaderSlotContext.Provider>
+        {drawerPoId && (() => {
+          const po = purchaseOrders.find((item) => item.id === drawerPoId);
+          if (!po) return null;
+          return (
+            <PoDrawer
+              po={po}
+              phase={poPhase(po, delivered, isoToday())}
+              staff={references.staff}
+              delivered={delivered}
+              invoicedValue={invoiced[po.id] ?? 0}
+              isInvoiced={isInvoiced(po, invoiced)}
+              canWrite={canWritePo}
+              currentStaffId={currentStaff?.id ?? null}
+              handlers={nextActionHandlers}
+              onClose={() => setDrawerPoId(null)}
+              onPdf={setPreviewPurchaseOrder}
+              onCopy={(item) => {
+                setDrawerPoId(null);
+                void handleCopyPurchaseOrder(item);
+              }}
+              onDelete={async (item) => {
+                await handleDeletePurchaseOrder(item);
+              }}
+            />
+          );
+        })()}
         {previewPurchaseOrder && (
           <PreviewModal
             po={previewPurchaseOrder}
