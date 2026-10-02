@@ -1,6 +1,6 @@
 import type React from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, ArrowRight, Check, CircleCheck, ClipboardPaste, Plus, Save, Search, Send, Trash2, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, CircleCheck, ClipboardPaste, Plus, Save, Search, Send, Sparkles, Trash2, X } from "lucide-react";
 import {
   createPurchaseOrder,
   loadPriceItems,
@@ -13,6 +13,7 @@ import {
 } from "./lib/data";
 import { confirmDialog } from "./lib/dialog";
 import { parseExcelLines } from "./lib/excel";
+import { construirHistorico, sugerirRubrica, type FonteSugestao } from "./lib/rubricaSugestao";
 import { isoToday, lineNetRaw, money, moneyRound, shortDate } from "./lib/format";
 import type { PurchaseOrder, PurchaseOrderLineItem, ReferenceData, StaffMember, SupplierPriceItem } from "./types";
 import { VAT_RATES, catLabel, findCategory, initialsFromName, formatProjectSiteContact } from "./shared";
@@ -38,6 +39,8 @@ export const DELIVERY_TIME_OPTIONS = [
 
 export type PurchaseOrderLineDraft = PurchaseOrderLineItem & {
   expense_type?: string;
+  // de onde veio a rubrica sugerida automaticamente (só no ecrã; não é gravado)
+  category_source?: FonteSugestao;
 };
 
 const STEP_TITLES = ["Obra e fornecedor", "Artigos", "Entrega", "Rever e validar"];
@@ -100,6 +103,15 @@ export function POForm({
     (category) => category.is_active || editingCategoryIds.has(category.id) || category.id === editingPurchaseOrder?.category_id,
   );
   const categoryById = useMemo(() => new Map(activeCategories.map((category) => [category.id, category])), [activeCategories]);
+  // Lista analítica ATUAL (só códigos ativos): é a única que se pode escolher / sugerir
+  const currentCategories = useMemo(() => references.categories.filter((category) => category.is_active), [references.categories]);
+  const currentById = useMemo(() => new Map(currentCategories.map((category) => [category.id, category])), [currentCategories]);
+  const currentByCode = useMemo(
+    () => new Map(currentCategories.map((category) => [(category.category_code ?? "").trim().toUpperCase(), category])),
+    [currentCategories],
+  );
+  const historicoRubricas = useMemo(() => construirHistorico(purchaseOrders, currentById), [purchaseOrders, currentById]);
+  const hasCurrentCategory = (categoryId: string | null | undefined) => Boolean(categoryId && currentById.has(categoryId));
 
   // Numa adjudicação nova, fornecedor e obra começam vazios (evita escolher o errado sem reparar).
   // A obra só vem pré-preenchida se o utilizador tiver acesso a uma única obra.
@@ -176,7 +188,7 @@ export function POForm({
   const supplier = references.suppliers.find((item) => item.id === supplierId) ?? null;
   const project = references.projects.find((item) => item.id === projectId) ?? null;
   const cleanLines = lines.filter((line) => line.description.trim());
-  const missingCategoryCount = cleanLines.filter((line) => !line.category_id).length;
+  const missingCategoryCount = cleanLines.filter((line) => !hasCurrentCategory(line.category_id)).length;
   const subtotal = lines.reduce((sum, item) => sum + lineNetRaw(item), 0);
   const vatTotal = lines.reduce((sum, item) => sum + lineNetRaw(item) * (item.vat_rate / 100), 0);
   const grandTotal = subtotal + vatTotal;
@@ -206,6 +218,36 @@ export function POForm({
     };
   }, [supplierId, projectId]);
   const priceByKey = useMemo(() => new Map(priceItems.map((item) => [priceItemKey(item), item])), [priceItems]);
+
+  // ── Sugestão automática da rubrica (preçário → histórico → palavras-chave) ──
+  function comSugestao(line: PurchaseOrderLineDraft): PurchaseOrderLineDraft {
+    if (!line.description.trim() || hasCurrentCategory(line.category_id)) return line;
+    const sugestao = sugerirRubrica(line, {
+      ativos: currentById,
+      ativosPorCodigo: currentByCode,
+      precoPorChave: priceByKey,
+      chavePreco: (item) => priceItemKey({ item_ref: item.item_ref ?? null, description: item.description }),
+      historico: historicoRubricas,
+    });
+    if (!sugestao) return line;
+    return { ...line, category_id: sugestao.category.id, expense_type: sugestao.category.expense_type ?? "", category_source: sugestao.fonte };
+  }
+  function sugerirRubricasEmFalta() {
+    let preenchidas = 0;
+    const next = lines.map((line) => {
+      const nova = comSugestao(line);
+      if (nova !== line) preenchidas += 1;
+      return nova;
+    });
+    setLines(next);
+    const faltam = next.filter((line) => line.description.trim() && !hasCurrentCategory(line.category_id)).length;
+    setError(null);
+    setInfo(
+      preenchidas === 0
+        ? "Não encontrei sugestões — escolha a rubrica à mão nas linhas assinaladas."
+        : `${preenchidas} rubrica(s) sugerida(s) — confirme-as (estão marcadas «Sugerida»).${faltam ? ` Faltam ${faltam} por escolher à mão.` : ""}`,
+    );
+  }
 
   // Nº de artigos de preçário por fornecedor nesta obra (lista de fornecedores do passo 1)
   const [priceCounts, setPriceCounts] = useState<Record<string, number>>({});
@@ -246,8 +288,9 @@ export function POForm({
         category_id: item.category_id ?? "",
         expense_type: category?.expense_type ?? "",
       };
-      if (blank >= 0) return current.map((line, index) => (index === blank ? { ...newLine, sort_order: line.sort_order } : line));
-      return [...current, newLine];
+      const linhaFinal = hasCurrentCategory(newLine.category_id) ? newLine : comSugestao({ ...newLine, category_id: "" });
+      if (blank >= 0) return current.map((line, index) => (index === blank ? { ...linhaFinal, sort_order: line.sort_order } : line));
+      return [...current, linhaFinal];
     });
   }
   function quantityInLines(item: SupplierPriceItem) {
@@ -279,14 +322,16 @@ export function POForm({
     if (novas.length === 0) return;
     setLines((atuais) => [
       ...atuais.filter((line) => line.description.trim()),
-      ...novas.map((n, i) => ({
-        ...emptyLine(atuais.length + i + 1),
-        item_ref: n.item_ref,
-        description: n.description,
-        quantity: n.quantity,
-        unit: n.unit,
-        rate: n.rate,
-      })),
+      ...novas.map((n, i) =>
+        comSugestao({
+          ...emptyLine(atuais.length + i + 1),
+          item_ref: n.item_ref,
+          description: n.description,
+          quantity: n.quantity,
+          unit: n.unit,
+          rate: n.rate,
+        }),
+      ),
     ]);
     setPasteText("");
     setPasteOpen(false);
@@ -299,8 +344,8 @@ export function POForm({
       if (batchField === "discount_pct") return { ...line, discount_pct: Number(batchValue) };
       if (batchField === "discount_pct_2") return { ...line, discount_pct_2: Number(batchValue) };
       if (batchField === "category") {
-        const chosen = findCategory(activeCategories, batchValue);
-        if (chosen) return { ...line, category_id: chosen.id, expense_type: chosen.expense_type ?? "" };
+        const chosen = findCategory(currentCategories, batchValue);
+        if (chosen) return { ...line, category_id: chosen.id, expense_type: chosen.expense_type ?? "", category_source: undefined };
       }
       return line;
     }));
@@ -390,7 +435,7 @@ export function POForm({
     for (let i = 0; i < target; i += 1) {
       if (!stepValid[i]) {
         if (i === 1) setShowLineErrors(true);
-        setError(i === 0 ? "Escolha a obra e o fornecedor." : missingCategoryCount ? `${missingCategoryCount} linha(s) sem rubrica — estão assinaladas a vermelho.` : "Junte pelo menos um artigo.");
+        setError(i === 0 ? "Escolha a obra e o fornecedor." : missingCategoryCount ? `${missingCategoryCount} linha(s) sem rubrica da lista analítica atual — estão assinaladas a vermelho. Use «Sugerir rubricas» ou escolha à mão.` : "Junte pelo menos um artigo.");
         setStep(i);
         return;
       }
@@ -641,6 +686,11 @@ export function POForm({
                   <button type="button" className="outline sm" onClick={() => setLines([...lines, emptyLine(lines.length + 1)])}>
                     <Plus size={16} /> Linha livre
                   </button>
+                  {missingCategoryCount > 0 && (
+                    <button type="button" className="outline sm" onClick={sugerirRubricasEmFalta} title="Preenche a rubrica das linhas sem código: preçário, depois histórico, depois palavras-chave">
+                      <Sparkles size={16} /> Sugerir rubricas ({missingCategoryCount})
+                    </button>
+                  )}
                 </div>
               </div>
               {selectedLines.size > 0 && (
@@ -668,10 +718,10 @@ export function POForm({
                 </div>
               )}
               <datalist id="subcategorias-list">
-                {[...activeCategories]
+                {[...currentCategories]
                   .sort((x, y) => catLabel(x).localeCompare(catLabel(y), "pt", { numeric: true }))
                   .map((cat) => (
-                    <option value={catLabel(cat)} key={cat.id} />
+                    <option value={catLabel(cat)} label={cat.description ? `${catLabel(cat)} · ${cat.description}` : undefined} key={cat.id} />
                   ))}
               </datalist>
               {lines.length === 0 ? (
@@ -695,13 +745,23 @@ export function POForm({
                     <tbody>
                       {lines.map((line, index) => {
                         const selectedCategory = categoryById.get(line.category_id ?? "");
-                        const missing = showLineErrors && line.description.trim() !== "" && !line.category_id;
+                        const oldCode = Boolean(selectedCategory && !hasCurrentCategory(line.category_id));
+                        const missing = line.description.trim() !== "" && !hasCurrentCategory(line.category_id) && (showLineErrors || oldCode);
                         const fromList = line.description.trim() ? priceByKey.get(priceItemKey({ item_ref: line.item_ref, description: line.description })) : undefined;
                         return (
                           <tr key={index} className={missing ? "line-missing" : selectedLines.has(index) ? "line-row-selected" : undefined} data-line-missing={missing ? "true" : undefined}>
                             <td className="col-check"><input type="checkbox" checked={selectedLines.has(index)} onChange={() => toggleLineSelected(index)} aria-label={`Selecionar linha ${index + 1}`} /></td>
                             <td className="col-artigo">
-                              <input placeholder="Descrição do artigo" value={line.description} onChange={(event) => updateLine(index, { description: event.target.value })} aria-label="Descrição" />
+                              <input
+                                placeholder="Descrição do artigo"
+                                value={line.description}
+                                onChange={(event) => updateLine(index, { description: event.target.value })}
+                                onBlur={() => {
+                                  const sugerida = comSugestao(line);
+                                  if (sugerida !== line) updateLine(index, sugerida);
+                                }}
+                                aria-label="Descrição"
+                              />
                               <div className="rubrica-field">
                               <input
                                 list="subcategorias-list"
@@ -712,15 +772,19 @@ export function POForm({
                                 key={`sub-${index}-${line.category_id ?? "none"}`}
                                 onInput={(event) => {
                                   const typed = (event.target as HTMLInputElement).value;
-                                  const chosen = findCategory(activeCategories, typed);
+                                  const chosen = findCategory(currentCategories, typed);
                                   if (chosen) {
-                                    updateLine(index, { category_id: chosen.id, expense_type: chosen.expense_type ?? "" });
+                                    updateLine(index, { category_id: chosen.id, expense_type: chosen.expense_type ?? "", category_source: undefined });
                                   } else if (line.category_id) {
-                                    updateLine(index, { category_id: "" });
+                                    updateLine(index, { category_id: "", category_source: undefined });
                                   }
                                 }}
                               />
-                              {selectedCategory?.expense_type && <small className="muted">{selectedCategory.expense_type}</small>}
+                              {selectedCategory?.expense_type && !oldCode && <small className="muted">{selectedCategory.expense_type}</small>}
+                              {oldCode && <small className="rubrica-antiga">Código antigo — escolha um da lista atual</small>}
+                              {!oldCode && line.category_source && selectedCategory && (
+                                <small className="rubrica-sugerida">Sugerida ({line.category_source}) — confirme</small>
+                              )}
                               </div>
                               <div className="artigo-sub">
                                 <input className="ref-input" placeholder="Ref." value={line.item_ref ?? ""} onChange={(event) => updateLine(index, { item_ref: event.target.value })} aria-label="Ref. do artigo" />

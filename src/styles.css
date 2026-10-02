@@ -3118,6 +3118,8 @@ label.check input[type="checkbox"] { flex: 0 0 18px; min-height: 0; padding: 0; 
 .lines-table .col-artigo { min-width: 300px; }
 .rubrica-field { margin-top: 4px; }
 .rubrica-field small { display: block; font-size: 11px; margin-top: 2px; }
+.rubrica-field small.rubrica-sugerida { color: var(--warning-text); font-weight: 600; }
+.rubrica-field small.rubrica-antiga { color: var(--red-text); font-weight: 600; }
 .lines-table .col-price input { width: 90px; }
 @media (max-width: 900px) { .po-summary { order: 0; } }
 
