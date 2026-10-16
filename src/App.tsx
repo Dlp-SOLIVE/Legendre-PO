@@ -817,6 +817,7 @@ export function ProcurementShell({ session }: { session: Session }) {
                   { section: "Faturação", name: "cost_centre_code", label: "Código de centro de custo" },
                   { section: "Faturação", name: "invoice_project_code", label: "Código de obra na fatura" },
                   { section: "Entregas por defeito", name: "site_address", label: "Morada da obra", type: "textarea" },
+                  { section: "Entregas por defeito", name: "default_delivery_address", label: "Morada de entrega (só se diferente da morada da obra — tem prioridade nas novas adjudicações)", type: "textarea" },
                   { section: "Entregas por defeito", name: "site_contact_name", label: "Nome do contacto na obra" },
                   { section: "Entregas por defeito", name: "site_contact_phone", label: "Telefone do contacto na obra" },
                   { section: "Entregas por defeito", name: "default_site_contacts", label: "Contactos na obra (predefinidos — um por linha, ex: João Silva (encarregado) - 937 128 143)", type: "textarea" },
