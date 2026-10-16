@@ -215,10 +215,21 @@ async function upsertRow(table: string, payload: Record<string, unknown>, key = 
   const cleanPayload = Object.fromEntries(
     Object.entries(payload).filter(([, value]) => value !== undefined),
   );
-  const query = cleanPayload[key]
-    ? client.from(table).update(cleanPayload).eq(key, cleanPayload[key] as string)
-    : client.from(table).insert(cleanPayload);
-  const { error } = await query;
+  if (cleanPayload[key]) {
+    // .select() devolve as linhas alteradas: se vier vazio, o RLS bloqueou a
+    // alteração em silêncio (sem erro) — avisar em vez de fingir que gravou.
+    const { data, error } = await client
+      .from(table)
+      .update(cleanPayload)
+      .eq(key, cleanPayload[key] as string)
+      .select(key);
+    if (error) throw error;
+    if (!data || data.length === 0) {
+      throw new Error("A alteração não foi gravada: sem permissão para editar este registo (confirme que o seu utilizador está ativo e com perfil Admin).");
+    }
+    return;
+  }
+  const { error } = await client.from(table).insert(cleanPayload);
   if (error) throw error;
 }
 
