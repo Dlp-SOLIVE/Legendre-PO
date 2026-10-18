@@ -54,6 +54,7 @@ export function AdminPanel<T extends { id: string; is_active?: boolean } & Recor
         payload[field.name] = String(form.get(field.name) ?? "").trim() || null;
       }
     });
+    setError(null);
     try {
       await onSave(payload as Partial<T>);
       setEditing(null);
@@ -87,13 +88,13 @@ export function AdminPanel<T extends { id: string; is_active?: boolean } & Recor
           </button>
         )}
       </div>
-      {error && <div className="notice error">{error}</div>}
+      {error && !editing && <div className="notice error">{error}</div>}
       <div className={editing ? "admin-split" : undefined}>
       <DataTable
         rows={rows}
         columns={fields.filter((field) => field.name !== "is_active").slice(0, 5).map((field) => ({ key: field.name, label: field.label }))}
         identity={identity}
-        onEdit={allowEdit ? (row) => setEditing(row) : undefined}
+        onEdit={allowEdit ? (row) => { setError(null); setEditing(row); } : undefined}
         onDelete={allowDelete ? (row) => remove(row.id) : undefined}
       />
       {editing && (
@@ -104,6 +105,7 @@ export function AdminPanel<T extends { id: string; is_active?: boolean } & Recor
             <X size={16} />
           </button>
         </div>
+        {error && <div className="notice error" role="alert">{error}</div>}
         <form className="editor-grid" onSubmit={submit} key={String(editing.id ?? "novo")}>
           {fields.map((field, index) => (
             <Fragment key={field.name}>
