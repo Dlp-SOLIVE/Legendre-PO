@@ -39,6 +39,7 @@ export function AdminPanel<T extends { id: string; is_active?: boolean } & Recor
 }) {
   const [editing, setEditing] = useState<Partial<T> | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -48,19 +49,24 @@ export function AdminPanel<T extends { id: string; is_active?: boolean } & Recor
       if (field.type === "checkbox") {
         payload[field.name] = form.get(field.name) === "on";
       } else if (field.type === "number") {
-        const raw = String(form.get(field.name) ?? "").trim();
-        payload[field.name] = raw === "" ? null : Number(raw);
+        // aceita vírgula decimal (pt-PT); vazio não é enviado, para não violar
+        // colunas NOT NULL (ex.: quota do consórcio) nem apagar o valor existente
+        const raw = String(form.get(field.name) ?? "").trim().replace(",", ".");
+        if (raw !== "") payload[field.name] = Number(raw);
       } else {
         payload[field.name] = String(form.get(field.name) ?? "").trim() || null;
       }
     });
     setError(null);
+    setSaving(true);
     try {
       await onSave(payload as Partial<T>);
       setEditing(null);
       await onRefresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Não foi possível guardar o registo.");
+      setError(friendlySaveError(err, fields));
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -145,18 +151,20 @@ export function AdminPanel<T extends { id: string; is_active?: boolean } & Recor
                 <input
                   name={field.name}
                   required={field.required}
-                  type={field.type ?? "text"}
-                  step={field.type === "number" ? "any" : undefined}
+                  type={field.type === "number" ? "text" : field.type ?? "text"}
+                  inputMode={field.type === "number" ? "decimal" : undefined}
+                  pattern={field.type === "number" ? "-?[0-9]+([.,][0-9]+)?" : undefined}
                   defaultValue={(editing[field.name] as string | null | undefined) ?? ""}
                 />
               )}
             </label>
             </Fragment>
           ))}
+          {error && <div className="notice error wide" role="alert">{error}</div>}
           <div className="button-row wide">
-            <button type="submit">
+            <button type="submit" disabled={saving}>
               <Save size={16} />
-              Guardar
+              {saving ? "A guardar…" : "Guardar"}
             </button>
             <button type="button" className="secondary" onClick={() => setEditing(null)}>
               <X size={16} />
@@ -169,6 +177,28 @@ export function AdminPanel<T extends { id: string; is_active?: boolean } & Recor
       </div>
     </section>
   );
+}
+
+// Traduz os erros do Supabase/Postgres para algo que o utilizador perceba,
+// indicando o campo em causa quando possível.
+function friendlySaveError<T>(err: unknown, fields: FieldDef<T>[]): string {
+  const raw = err instanceof Error
+    ? err.message
+    : typeof err === "object" && err && "message" in err
+      ? String((err as { message: unknown }).message)
+      : "";
+  if (!raw) return "Não foi possível guardar o registo.";
+  const labelOf = (name: string) => fields.find((f) => f.name === name)?.label ?? name;
+  const missingColumn = raw.match(/Could not find the '([^']+)' column/i);
+  if (missingColumn) {
+    return `Não foi possível guardar: o campo «${labelOf(missingColumn[1])}» não existe na base de dados (falta criar a coluna "${missingColumn[1]}" no Supabase).`;
+  }
+  const notNull = raw.match(/null value in column "([^"]+)"/i);
+  if (notNull) return `Não foi possível guardar: o campo «${labelOf(notNull[1])}» é obrigatório.`;
+  if (/duplicate key|unique constraint/i.test(raw)) {
+    return `Não foi possível guardar: já existe outro registo com o mesmo valor (${raw}).`;
+  }
+  return `Não foi possível guardar: ${raw}`;
 }
 
 // Dados da empresa que aparecem no cabeçalho e rodapé de todas as adjudicações
