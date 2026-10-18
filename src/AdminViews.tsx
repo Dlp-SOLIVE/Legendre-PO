@@ -106,7 +106,18 @@ export function AdminPanel<T extends { id: string; is_active?: boolean } & Recor
           </button>
         </div>
         {error && <div className="notice error" role="alert">{error}</div>}
-        <form className="editor-grid" onSubmit={submit} key={String(editing.id ?? "novo")}>
+        <form
+          className="editor-grid"
+          onSubmit={submit}
+          key={String(editing.id ?? "novo")}
+          onInvalidCapture={(event) => {
+            // o browser bloqueia o Guardar quando um campo é inválido; dizer qual é
+            const target = event.target as HTMLInputElement;
+            const label = fields.find((f) => f.name === target.name)?.label ?? target.name;
+            setError(`Não foi possível guardar — corrija o campo «${label}»: ${target.validationMessage}`);
+            target.scrollIntoView({ block: "center" });
+          }}
+        >
           {fields.map((field, index) => (
             <Fragment key={field.name}>
             {field.section && field.section !== fields[index - 1]?.section && (
@@ -135,6 +146,7 @@ export function AdminPanel<T extends { id: string; is_active?: boolean } & Recor
                   name={field.name}
                   required={field.required}
                   type={field.type ?? "text"}
+                  step={field.type === "number" ? "any" : undefined}
                   defaultValue={(editing[field.name] as string | null | undefined) ?? ""}
                 />
               )}
